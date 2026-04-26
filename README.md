@@ -1,13 +1,14 @@
 # CPU Core Visualizer
 
-Per-core vivid CPU bars for DankBar / DankMaterialShell.
+Per-core CPU bars plus memory and disk usage strips for DankBar / DankMaterialShell.
 
 ## What it does
 
-- one bar per CPU core
+- one bar per CPU core, plus dedicated memory and disk sections
 - vivid, soft-dark, mono, or UI-base rendering
-- bars only, no labels
-- optional overall CPU percentage plus adjustable probe time and smoother motion
+- compact icons to distinguish CPU, memory, and disk sections
+- selectable disk partitions for the disk usage section
+- optional usage percentages plus adjustable probe time and smoother motion
 
 ## Install
 

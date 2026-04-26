@@ -12,6 +12,7 @@ PluginComponent {
     property var softPalette: ["#ff8aa5", "#ffac7a", "#ffc27a", "#ffd86e", "#fff07a", "#dcff8a", "#b8ff94", "#8eff9d", "#7fffb8", "#7fffd8", "#80f3ff", "#82dcff", "#86c3ff", "#90acff", "#a595ff", "#bc8cff", "#d38bff", "#ea8cff", "#ff8fe8", "#ff93cf", "#ff95b5", "#ff9c9c", "#ffb091", "#ffc188", "#ffd487", "#f1e88f", "#d7f39a", "#bbeea8", "#a6e8bf", "#9be1d4", "#a2d8e6", "#b4cfee"]
     property int barWidth: Math.max(2, Math.round(numberSetting("barWidth", 4)))
     property int barGap: Math.max(0, Math.round(numberSetting("barGap", 2)))
+    property int sectionPadding: Math.max(0, Math.round(numberSetting("sectionPadding", Math.max(Theme.spacingS, root.barGap + 4))))
     property int maxVisibleCores: Math.max(1, Math.round(numberSetting("maxVisibleCores", 32)))
     property int minBarHeight: Math.max(0, Math.round(numberSetting("minBarHeight", 2)))
     property int animationDuration: Math.max(120, Math.round(numberSetting("animationDuration", 650)))
@@ -23,7 +24,108 @@ PluginComponent {
     property bool barHovered: false
     property bool popoutHovered: false
     property bool detailsPopoutOpen: false
-    property var animatedCoreUsage: []
+    property var animatedCpuUsage: []
+    property real animatedMemoryUsage: 0
+    property real animatedDiskUsage: 0
+    readonly property real totalCpuUsage: root.clampUsage(Number(DgopService.cpuUsage || 0))
+    readonly property real memoryUsageValue: root.clampUsage(Number(DgopService.memoryUsage || 0))
+    readonly property var selectedDiskMountPaths: root.arraySetting("selectedDiskMountPaths", ["/"])
+    readonly property var diskMountList: Array.isArray(DgopService.diskMounts) ? DgopService.diskMounts : []
+    readonly property var selectedDiskMounts: {
+        let exactMatches = [];
+        let fallback = [];
+        for (let i = 0; i < root.diskMountList.length; i++) {
+            const mount = root.diskMountList[i];
+            const mountPath = root.diskMountPath(mount);
+            if (!mountPath || !root.diskMountHasUsage(mount))
+                continue;
+
+            fallback.push(mount);
+            if (root.selectedDiskMountPaths.indexOf(mountPath) !== -1)
+                exactMatches.push(mount);
+        }
+
+        if (exactMatches.length > 0)
+            return exactMatches;
+
+        return fallback;
+    }
+    readonly property string diskSelectionLabel: {
+        if (root.selectedDiskMounts.length <= 0)
+            return "Waiting for disk stats";
+
+        let labels = [];
+        for (let i = 0; i < root.selectedDiskMounts.length; i++)
+            labels.push(root.diskMountPath(root.selectedDiskMounts[i]));
+
+        return labels.join(", ");
+    }
+    readonly property real diskUsageValue: {
+        if (root.selectedDiskMounts.length <= 0)
+            return 0;
+
+        let weightedUsed = 0;
+        let weightedTotal = 0;
+        for (let i = 0; i < root.selectedDiskMounts.length; i++) {
+            const mount = root.selectedDiskMounts[i];
+            const total = Number(mount && mount.total !== undefined ? mount.total : 0);
+            const used = Number(mount && mount.used !== undefined ? mount.used : 0);
+            if (total > 0) {
+                weightedUsed += Math.max(0, used);
+                weightedTotal += total;
+            }
+        }
+
+        if (weightedTotal > 0)
+            return root.clampUsage((weightedUsed / weightedTotal) * 100);
+
+        let percentTotal = 0;
+        let percentCount = 0;
+        for (let j = 0; j < root.selectedDiskMounts.length; j++) {
+            const percent = root.diskMountPercent(root.selectedDiskMounts[j]);
+            if (percent >= 0) {
+                percentTotal += percent;
+                percentCount++;
+            }
+        }
+
+        if (percentCount <= 0)
+            return 0;
+
+        return root.clampUsage(percentTotal / percentCount);
+    }
+    readonly property string diskUsageSubtitle: {
+        if (root.selectedDiskMounts.length <= 0)
+            return "Waiting for disk stats";
+
+        if (root.selectedDiskMounts.length === 1) {
+            const mount = root.selectedDiskMounts[0];
+            const total = Number(mount && mount.total !== undefined ? mount.total : 0);
+            if (total > 0)
+                return root.diskMountPath(mount) + "  " + root.formatStorage(mount.used) + " / " + root.formatStorage(total);
+        }
+
+        return root.diskSelectionLabel;
+    }
+    readonly property string diskUsageTooltipText: {
+        if (root.selectedDiskMounts.length <= 0)
+            return "Waiting for disk stats";
+
+        let parts = [];
+        for (let i = 0; i < root.selectedDiskMounts.length; i++) {
+            const mount = root.selectedDiskMounts[i];
+            let part = root.diskMountPath(mount) + " " + root.diskMountPercent(mount).toFixed(0) + "%";
+            const total = Number(mount && mount.total !== undefined ? mount.total : 0);
+            if (total > 0)
+                part += " (" + root.formatStorage(mount.used) + " / " + root.formatStorage(total) + ")";
+            parts.push(part);
+        }
+
+        return parts.join("  |  ");
+    }
+    readonly property var sectionKeys: ["cpu", "memory", "disk"]
+    readonly property int sectionGap: root.sectionPadding
+    readonly property int compactIconSize: Math.max(10, Math.min(root.widgetThickness - root.padding * 2, Theme.barIconSize(root.barThickness, -8, root.barConfig?.maximizeWidgetIcons, root.barConfig?.iconScale)))
     readonly property var rawCoreUsage: {
         const perCore = DgopService.perCoreCpuUsage;
         if (Array.isArray(perCore) && perCore.length > 0)
@@ -37,6 +139,61 @@ PluginComponent {
             return 1;
 
         return Math.min(root.maxVisibleCores, total);
+    }
+
+    function clampUsage(value) {
+        if (Number.isNaN(value))
+            return 0;
+
+        return Math.max(0, Math.min(100, value));
+    }
+
+    function arraySetting(key, fallback) {
+        if (pluginData && Array.isArray(pluginData[key]))
+            return pluginData[key];
+
+        return fallback;
+    }
+
+    function diskMountPath(mount) {
+        if (!mount)
+            return "";
+
+        if (mount.mount !== undefined && mount.mount !== null && String(mount.mount).length > 0)
+            return String(mount.mount);
+
+        if (mount.mountpoint !== undefined && mount.mountpoint !== null && String(mount.mountpoint).length > 0)
+            return String(mount.mountpoint);
+
+        return "";
+    }
+
+    function diskMountPercent(mount) {
+        if (!mount)
+            return 0;
+
+        const total = Number(mount.total || 0);
+        const used = Number(mount.used || 0);
+        if (total > 0)
+            return root.clampUsage((used / total) * 100);
+
+        if (mount.percent !== undefined && mount.percent !== null) {
+            const parsedPercent = Number(String(mount.percent).replace("%", ""));
+            if (!Number.isNaN(parsedPercent))
+                return root.clampUsage(parsedPercent);
+        }
+
+        return 0;
+    }
+
+    function diskMountHasUsage(mount) {
+        if (!mount)
+            return false;
+
+        if (Number(mount.total || 0) > 0)
+            return true;
+
+        return mount.percent !== undefined && mount.percent !== null && String(mount.percent).length > 0;
     }
 
     function numberSetting(key, fallback) {
@@ -69,24 +226,29 @@ PluginComponent {
         return Theme.barTextSize(root.barThickness, fontScale, maximizeText);
     }
 
+    function syncUsageValue(current, target, force) {
+        if (force || Number.isNaN(current))
+            return target;
+
+        const delta = target - current;
+        if (Math.abs(delta) < 0.35)
+            return target;
+
+        return current + delta * root.smoothingFactor;
+    }
+
     function syncAnimatedUsage(force) {
-        let next = root.animatedCoreUsage ? root.animatedCoreUsage.slice() : [];
+        let next = root.animatedCpuUsage ? root.animatedCpuUsage.slice() : [];
         const targetLength = root.rawCoreUsage.length;
         for (let i = 0; i < targetLength; i++) {
             const target = root.usageFor(i);
             const current = Number(next[i]);
-            if (force || Number.isNaN(current)) {
-                next[i] = target;
-            } else {
-                const delta = target - current;
-                if (Math.abs(delta) < 0.35)
-                    next[i] = target;
-                else
-                    next[i] = current + delta * root.smoothingFactor;
-            }
+            next[i] = root.syncUsageValue(current, target, force);
         }
         next.length = targetLength;
-        root.animatedCoreUsage = next;
+        root.animatedCpuUsage = next;
+        root.animatedMemoryUsage = root.syncUsageValue(Number(root.animatedMemoryUsage), root.memoryUsageValue, force);
+        root.animatedDiskUsage = root.syncUsageValue(Number(root.animatedDiskUsage), root.diskUsageValue, force);
     }
 
     function usageFor(index) {
@@ -100,10 +262,10 @@ PluginComponent {
         return Math.max(0, Math.min(100, value));
     }
 
-    function ratioFor(index) {
-        const animated = Number(root.animatedCoreUsage[index]);
+    function cpuRatioFor(index) {
+        const animated = Number(root.animatedCpuUsage[index]);
         if (!Number.isNaN(animated))
-            return Math.max(0, Math.min(100, animated)) / 100;
+            return root.clampUsage(animated) / 100;
 
         return root.usageFor(index) / 100;
     }
@@ -138,20 +300,134 @@ PluginComponent {
         return "Idle";
     }
 
-    function cardFillWidth(index, width) {
-        return Math.max(10, Math.round(width * root.ratioFor(index)));
+    function sectionIcon(sectionKey) {
+        if (sectionKey === "memory")
+            return "sd_card";
+
+        if (sectionKey === "disk")
+            return "storage";
+
+        return "memory";
     }
 
-    function verticalHeightFor(index, availableHeight) {
-        const ratio = root.ratioFor(index);
+    function sectionTitle(sectionKey) {
+        if (sectionKey === "memory")
+            return "Memory";
+
+        if (sectionKey === "disk")
+            return "Disk";
+
+        return "CPU";
+    }
+
+    function sectionBarCount(sectionKey) {
+        if (sectionKey === "cpu")
+            return root.displayedCoreCount;
+
+        return 1;
+    }
+
+    function sectionUsageFor(sectionKey, index) {
+        if (sectionKey === "memory")
+            return root.memoryUsageValue;
+
+        if (sectionKey === "disk")
+            return root.diskUsageValue;
+
+        return root.usageFor(index);
+    }
+
+    function sectionAnimatedUsageFor(sectionKey, index) {
+        if (sectionKey === "memory")
+            return root.animatedMemoryUsage;
+
+        if (sectionKey === "disk")
+            return root.animatedDiskUsage;
+
+        return Number(root.animatedCpuUsage[index]);
+    }
+
+    function sectionRatioFor(sectionKey, index) {
+        const animated = Number(root.sectionAnimatedUsageFor(sectionKey, index));
+        if (!Number.isNaN(animated))
+            return root.clampUsage(animated) / 100;
+
+        return root.sectionUsageFor(sectionKey, index) / 100;
+    }
+
+    function sectionPercentageText(sectionKey) {
+        return root.sectionUsageFor(sectionKey, 0).toFixed(0) + "%";
+    }
+
+    function sectionColorFor(sectionKey, index) {
+        if (sectionKey === "cpu")
+            return root.colorFor(index);
+
+        if (root.colorMode === "mono")
+            return Theme.widgetTextColor;
+
+        if (root.colorMode === "base")
+            return Theme.primary;
+
+        if (sectionKey === "memory")
+            return root.colorMode === "soft" ? root.softPalette[11] : root.vividPalette[13];
+
+        return root.colorMode === "soft" ? root.softPalette[3] : root.vividPalette[3];
+    }
+
+    function formatStorage(bytes) {
+        const value = Number(bytes || 0);
+        if (value <= 0)
+            return "0 B";
+
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        let scaled = value;
+        let unitIndex = 0;
+        while (scaled >= 1024 && unitIndex < units.length - 1) {
+            scaled /= 1024;
+            unitIndex++;
+        }
+
+        const decimals = scaled >= 10 || unitIndex === 0 ? 0 : 1;
+        return scaled.toFixed(decimals) + " " + units[unitIndex];
+    }
+
+    function sectionSummarySubtitle(sectionKey) {
+        if (sectionKey === "memory") {
+            const total = Number(DgopService.totalMemoryKB || 0);
+            if (total <= 0)
+                return "Waiting for memory stats";
+
+            return DgopService.formatSystemMemory(DgopService.usedMemoryKB) + " / " + DgopService.formatSystemMemory(total);
+        }
+
+        if (sectionKey === "disk") {
+            return root.diskUsageSubtitle;
+        }
+
+        const shownCores = root.displayedCoreCount;
+        const totalCores = root.rawCoreUsage.length;
+        const hottestIndex = root.hottestCoreIndex();
+        const hottestUsage = root.usageFor(hottestIndex).toFixed(0);
+        let subtitle = "Hot core C" + hottestIndex + " " + hottestUsage + "%";
+        subtitle += shownCores < totalCores ? "  |  " + shownCores + "/" + totalCores + " cores" : "  |  " + totalCores + " cores";
+        return subtitle;
+    }
+
+    function cardFillWidth(index, width) {
+        return Math.max(10, Math.round(width * root.cpuRatioFor(index)));
+    }
+
+    function verticalHeightFor(sectionKey, index, availableHeight) {
+        const ratio = root.sectionRatioFor(sectionKey, index);
         if (ratio <= 0)
             return root.minBarHeight;
 
         return Math.max(root.minBarHeight, Math.round(availableHeight * ratio));
     }
 
-    function horizontalLengthFor(index, availableWidth) {
-        const ratio = root.ratioFor(index);
+    function horizontalLengthFor(sectionKey, index, availableWidth) {
+        const ratio = root.sectionRatioFor(sectionKey, index);
         if (ratio <= 0)
             return root.minBarHeight;
 
@@ -172,7 +448,7 @@ PluginComponent {
     }
 
     function tooltipText() {
-        const totalUsage = Number(DgopService.cpuUsage || 0).toFixed(1);
+        const totalUsage = root.totalCpuUsage.toFixed(1);
         const totalCores = root.rawCoreUsage.length;
         const shownCores = root.displayedCoreCount;
         const hottestIndex = root.hottestCoreIndex();
@@ -184,7 +460,9 @@ PluginComponent {
         if (DgopService.cpuFrequency > 0)
             header += "  |  " + Math.round(DgopService.cpuFrequency) + " MHz";
 
-        let summary = "Hottest core: C" + hottestIndex + " " + hottestUsage + "%";
+        let summary = "Memory " + root.memoryUsageValue.toFixed(0) + "%";
+        summary += "  |  Disk " + root.diskUsageValue.toFixed(0) + "%";
+        summary += "  |  Hottest core C" + hottestIndex + " " + hottestUsage + "%";
         if (shownCores < totalCores)
             summary += "  |  Showing " + shownCores + "/" + totalCores + " cores";
         else
@@ -198,14 +476,19 @@ PluginComponent {
             else
                 lines[lineIndex] += "   " + entry;
         }
+        if (root.diskUsageTooltipText.length > 0)
+            lines.push("Disk mounts: " + root.diskUsageTooltipText);
+
         return header + "\n" + summary + (lines.length > 0 ? "\n" + lines.join("\n") : "");
     }
 
     function shortSummaryText() {
-        const totalUsage = Number(DgopService.cpuUsage || 0).toFixed(1);
+        const totalUsage = root.totalCpuUsage.toFixed(1);
         const hottestIndex = root.hottestCoreIndex();
         const hottestUsage = root.usageFor(hottestIndex).toFixed(0);
         let summary = "CPU " + totalUsage + "%";
+        summary += "  |  Memory " + root.memoryUsageValue.toFixed(0) + "%";
+        summary += "  |  Disk " + root.diskUsageValue.toFixed(0) + "%";
         summary += "  |  Hot core C" + hottestIndex + " " + hottestUsage + "%";
         if (DgopService.cpuTemperature > 0)
             summary += "  |  " + Math.round(DgopService.cpuTemperature) + "C";
@@ -239,6 +522,14 @@ PluginComponent {
         root.detailsPopoutOpen = false;
     }
 
+    function refreshBarsForLayoutChange() {
+        root.syncAnimatedUsage(true);
+        Qt.callLater(function() {
+            root.syncAnimatedUsage(true);
+            DgopService.updateAllStats();
+        });
+    }
+
     TextMetrics {
         id: overallPercentageMetrics
 
@@ -247,17 +538,171 @@ PluginComponent {
         text: "100%"
     }
 
+    component HorizontalMetricSection: Row {
+        id: horizontalSection
+
+        property string sectionKey: "cpu"
+
+        spacing: root.barGap
+
+        Row {
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: root.barGap
+
+            Repeater {
+                model: root.sectionBarCount(horizontalSection.sectionKey)
+
+                delegate: Item {
+                    width: root.barWidth
+                    height: Math.max(root.widgetThickness - root.padding * 2, root.minBarHeight + 1)
+
+                    Rectangle {
+                        width: parent.width
+                        height: root.verticalHeightFor(horizontalSection.sectionKey, index, parent.height)
+                        anchors.bottom: parent.bottom
+                        radius: Math.min(root.cornerRadius, width / 2)
+                        color: root.sectionColorFor(horizontalSection.sectionKey, index)
+                        opacity: 0.96
+
+                        Behavior on height {
+                            NumberAnimation {
+                                duration: root.animationDuration
+                                easing.type: Easing.OutCubic
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        Row {
+            visible: root.showOverallPercentage
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Math.max(2, root.barGap)
+
+            DankIcon {
+                name: root.sectionIcon(horizontalSection.sectionKey)
+                size: root.compactIconSize
+                color: root.sectionColorFor(horizontalSection.sectionKey, 0)
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Item {
+                width: Math.ceil(overallPercentageMetrics.advanceWidth)
+                height: horizontalMetricLabel.implicitHeight
+
+                StyledText {
+                    id: horizontalMetricLabel
+
+                    anchors.fill: parent
+                    horizontalAlignment: Text.AlignRight
+                    verticalAlignment: Text.AlignVCenter
+                    text: root.sectionPercentageText(horizontalSection.sectionKey)
+                    color: Theme.widgetTextColor
+                    font.pixelSize: root.overallTextSize()
+                    font.weight: Font.Medium
+                }
+            }
+        }
+    }
+
+    component VerticalMetricSection: Column {
+        id: verticalSection
+
+        property string sectionKey: "cpu"
+        property int availableWidth: Math.max(root.widgetThickness - root.padding * 2, root.minBarHeight + 1)
+        property bool fillFromLeft: root.axis?.edge === "left"
+
+        width: availableWidth
+        spacing: Math.max(2, root.barGap)
+
+        Column {
+            width: parent.width
+            spacing: root.barGap
+
+            Repeater {
+                model: root.sectionBarCount(verticalSection.sectionKey)
+
+                delegate: Item {
+                    width: parent.width
+                    height: root.barWidth
+
+                    Rectangle {
+                        height: parent.height
+                        width: root.horizontalLengthFor(verticalSection.sectionKey, index, parent.width)
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: verticalSection.fillFromLeft ? parent.left : undefined
+                        anchors.right: verticalSection.fillFromLeft ? undefined : parent.right
+                        radius: Math.min(root.cornerRadius, height / 2)
+                        color: root.sectionColorFor(verticalSection.sectionKey, index)
+                        opacity: 0.96
+
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: root.animationDuration
+                                easing.type: Easing.OutCubic
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        Row {
+            visible: root.showOverallPercentage
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Math.max(2, root.barGap)
+
+            DankIcon {
+                name: root.sectionIcon(verticalSection.sectionKey)
+                size: Math.min(root.compactIconSize, verticalSection.availableWidth)
+                color: root.sectionColorFor(verticalSection.sectionKey, 0)
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Item {
+                width: Math.min(verticalSection.width, Math.ceil(overallPercentageMetrics.advanceWidth))
+                height: verticalMetricLabel.implicitHeight
+
+                StyledText {
+                    id: verticalMetricLabel
+
+                    anchors.fill: parent
+                    horizontalAlignment: Text.AlignRight
+                    verticalAlignment: Text.AlignVCenter
+                    text: root.sectionPercentageText(verticalSection.sectionKey)
+                    color: Theme.widgetTextColor
+                    font.pixelSize: root.overallTextSize()
+                    font.weight: Font.Medium
+                }
+            }
+        }
+    }
+
     layerNamespacePlugin: "cpu-core-visualizer"
     Component.onCompleted: {
-        DgopService.addRef(["cpu"]);
+        DgopService.addRef(["cpu", "memory", "diskmounts"]);
         root.syncAnimatedUsage(true);
         DgopService.updateAllStats();
     }
     Component.onDestruction: {
         closePopoutTimer.stop();
-        DgopService.removeRef(["cpu"]);
+        DgopService.removeRef(["cpu", "memory", "diskmounts"]);
     }
-    onRawCoreUsageChanged: root.syncAnimatedUsage(root.animatedCoreUsage.length !== root.rawCoreUsage.length)
+    onRawCoreUsageChanged: root.syncAnimatedUsage(root.animatedCpuUsage.length !== root.rawCoreUsage.length)
+    onMemoryUsageValueChanged: root.syncAnimatedUsage(false)
+    onDiskUsageValueChanged: root.syncAnimatedUsage(false)
+    onIsVerticalChanged: root.refreshBarsForLayoutChange()
     popoutWidth: 420
     popoutHeight: 320
 
@@ -291,8 +736,6 @@ PluginComponent {
         Item {
             id: horizontalRoot
 
-            readonly property int availableHeight: Math.max(root.widgetThickness - root.padding * 2, root.minBarHeight + 1)
-
             implicitWidth: root.padding * 2 + horizontalContent.implicitWidth
             implicitHeight: root.widgetThickness
 
@@ -300,61 +743,14 @@ PluginComponent {
                 id: horizontalContent
 
                 anchors.centerIn: parent
-                spacing: root.barGap
+                spacing: root.sectionGap
 
-                Row {
-                    id: horizontalBars
+                Repeater {
+                    model: root.sectionKeys
 
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: root.barGap
-
-                    Repeater {
-                        model: root.displayedCoreCount
-
-                        delegate: Item {
-                            width: root.barWidth
-                            height: horizontalRoot.availableHeight
-
-                            Rectangle {
-                                width: parent.width
-                                height: root.verticalHeightFor(index, parent.height)
-                                anchors.bottom: parent.bottom
-                                radius: Math.min(root.cornerRadius, width / 2)
-                                color: root.colorFor(index)
-                                opacity: 0.96
-
-                                Behavior on height {
-                                    NumberAnimation {
-                                        duration: root.animationDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-
-                                }
-
-                            }
-
-                        }
-
-                    }
-
-                }
-
-                Item {
-                    visible: root.showOverallPercentage
-                    width: Math.ceil(overallPercentageMetrics.advanceWidth)
-                    height: horizontalPercentageLabel.implicitHeight
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    StyledText {
-                        id: horizontalPercentageLabel
-
-                        anchors.fill: parent
-                        horizontalAlignment: Text.AlignRight
-                        verticalAlignment: Text.AlignVCenter
-                        text: Number(DgopService.cpuUsage || 0).toFixed(0) + "%"
-                        color: Theme.widgetTextColor
-                        font.pixelSize: root.overallTextSize()
-                        font.weight: Font.Medium
+                    delegate: HorizontalMetricSection {
+                        sectionKey: modelData
+                        anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
@@ -383,9 +779,6 @@ PluginComponent {
         Item {
             id: verticalRoot
 
-            readonly property int availableWidth: Math.max(root.widgetThickness - root.padding * 2, root.minBarHeight + 1)
-            readonly property bool fillFromLeft: root.axis?.edge === "left"
-
             implicitWidth: root.widgetThickness
             implicitHeight: root.padding * 2 + verticalContent.implicitHeight
 
@@ -393,63 +786,14 @@ PluginComponent {
                 id: verticalContent
 
                 anchors.centerIn: parent
-                spacing: root.barGap
+                spacing: root.sectionGap
 
-                Column {
-                    id: verticalBars
+                Repeater {
+                    model: root.sectionKeys
 
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: root.barGap
-
-                    Repeater {
-                        model: root.displayedCoreCount
-
-                        delegate: Item {
-                            width: verticalRoot.availableWidth
-                            height: root.barWidth
-
-                            Rectangle {
-                                height: parent.height
-                                width: root.horizontalLengthFor(index, parent.width)
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.left: verticalRoot.fillFromLeft ? parent.left : undefined
-                                anchors.right: verticalRoot.fillFromLeft ? undefined : parent.right
-                                radius: Math.min(root.cornerRadius, height / 2)
-                                color: root.colorFor(index)
-                                opacity: 0.96
-
-                                Behavior on width {
-                                    NumberAnimation {
-                                        duration: root.animationDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-
-                                }
-
-                            }
-
-                        }
-
-                    }
-
-                }
-
-                Item {
-                    visible: root.showOverallPercentage
-                    width: Math.ceil(overallPercentageMetrics.advanceWidth)
-                    height: verticalPercentageLabel.implicitHeight
-                    anchors.horizontalCenter: parent.horizontalCenter
-
-                    StyledText {
-                        id: verticalPercentageLabel
-
-                        anchors.fill: parent
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        text: Number(DgopService.cpuUsage || 0).toFixed(0) + "%"
-                        color: Theme.widgetTextColor
-                        font.pixelSize: root.overallTextSize()
-                        font.weight: Font.Medium
+                    delegate: VerticalMetricSection {
+                        sectionKey: modelData
+                        anchors.horizontalCenter: parent.horizontalCenter
                     }
                 }
 
@@ -520,10 +864,83 @@ PluginComponent {
 
                     StyledText {
                         width: parent.width
-                        text: "Samples refresh every " + root.probeInterval + "ms from the plugin timer via DgopService. Animation smoothing runs continuously."
+                        text: "Samples refresh every " + root.probeInterval + "ms from the plugin timer via DgopService. CPU cores, memory, and disk usage animate independently."
                         color: Theme.surfaceVariantText
                         font.pixelSize: Theme.fontSizeSmall
                         wrapMode: Text.WordWrap
+                    }
+
+                    Flow {
+                        width: parent.width
+                        spacing: Theme.spacingS
+
+                        Repeater {
+                            model: root.sectionKeys
+
+                            delegate: Rectangle {
+                                width: Math.max(120, (contentColumn.width - Theme.spacingS * 2) / 3)
+                                height: 64
+                                radius: Theme.cornerRadius
+                                color: Theme.surfaceContainerHigh
+                                border.width: 1
+                                border.color: Theme.outline
+
+                                DankIcon {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingM
+                                    anchors.top: parent.top
+                                    anchors.topMargin: Theme.spacingM
+                                    name: root.sectionIcon(modelData)
+                                    size: Theme.iconSize
+                                    color: root.sectionColorFor(modelData, 0)
+                                }
+
+                                StyledText {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingM + Theme.iconSize + Theme.spacingS
+                                    anchors.top: parent.top
+                                    anchors.topMargin: Theme.spacingS
+                                    text: root.sectionTitle(modelData)
+                                    color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: Font.Medium
+                                }
+
+                                StyledText {
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: Theme.spacingM
+                                    anchors.top: parent.top
+                                    anchors.topMargin: Theme.spacingS
+                                    text: root.sectionPercentageText(modelData)
+                                    color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: Font.Bold
+                                }
+
+                                StyledText {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingM
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: Theme.spacingM
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: Theme.spacingS
+                                    text: root.sectionSummarySubtitle(modelData)
+                                    color: Theme.surfaceVariantText
+                                    font.pixelSize: Theme.fontSizeSmall - 1
+                                    wrapMode: Text.WordWrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        width: parent.width
+                        text: "CPU cores"
+                        color: Theme.surfaceText
+                        font.pixelSize: Theme.fontSizeSmall
+                        font.weight: Font.Bold
                     }
 
                     Flow {
@@ -555,7 +972,6 @@ PluginComponent {
                                         }
 
                                     }
-
                                 }
 
                                 Rectangle {

@@ -35,7 +35,7 @@ PluginSettings {
             "label": "Soft Dark",
             "value": "soft"
         }, {
-            "label": "Mono",
+            "label": "Mono",j
             "value": "mono"
         }, {
             "label": "UI Base",
@@ -79,7 +79,7 @@ PluginSettings {
         description: "Width of each core bar"
         defaultValue: 4
         minimum: 2
-        maximum: 12
+        maximum: 24
         unit: "px"
         leftIcon: "width_normal"
     }
