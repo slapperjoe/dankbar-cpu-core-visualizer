@@ -239,6 +239,14 @@ PluginComponent {
         root.detailsPopoutOpen = false;
     }
 
+    TextMetrics {
+        id: overallPercentageMetrics
+
+        font.pixelSize: root.overallTextSize()
+        font.weight: Font.Medium
+        text: "100%"
+    }
+
     layerNamespacePlugin: "cpu-core-visualizer"
     Component.onCompleted: {
         DgopService.addRef(["cpu"]);
@@ -331,13 +339,23 @@ PluginComponent {
 
                 }
 
-                StyledText {
+                Item {
                     visible: root.showOverallPercentage
+                    width: Math.ceil(overallPercentageMetrics.advanceWidth)
+                    height: horizontalPercentageLabel.implicitHeight
                     anchors.verticalCenter: parent.verticalCenter
-                    text: Number(DgopService.cpuUsage || 0).toFixed(0) + "%"
-                    color: Theme.widgetTextColor
-                    font.pixelSize: root.overallTextSize()
-                    font.weight: Font.Medium
+
+                    StyledText {
+                        id: horizontalPercentageLabel
+
+                        anchors.fill: parent
+                        horizontalAlignment: Text.AlignRight
+                        verticalAlignment: Text.AlignVCenter
+                        text: Number(DgopService.cpuUsage || 0).toFixed(0) + "%"
+                        color: Theme.widgetTextColor
+                        font.pixelSize: root.overallTextSize()
+                        font.weight: Font.Medium
+                    }
                 }
 
             }
@@ -366,6 +384,7 @@ PluginComponent {
             id: verticalRoot
 
             readonly property int availableWidth: Math.max(root.widgetThickness - root.padding * 2, root.minBarHeight + 1)
+            readonly property bool fillFromLeft: root.axis?.edge === "left"
 
             implicitWidth: root.widgetThickness
             implicitHeight: root.padding * 2 + verticalContent.implicitHeight
@@ -393,7 +412,8 @@ PluginComponent {
                                 height: parent.height
                                 width: root.horizontalLengthFor(index, parent.width)
                                 anchors.verticalCenter: parent.verticalCenter
-                                anchors.right: parent.right
+                                anchors.left: verticalRoot.fillFromLeft ? parent.left : undefined
+                                anchors.right: verticalRoot.fillFromLeft ? undefined : parent.right
                                 radius: Math.min(root.cornerRadius, height / 2)
                                 color: root.colorFor(index)
                                 opacity: 0.96
@@ -414,13 +434,23 @@ PluginComponent {
 
                 }
 
-                StyledText {
+                Item {
                     visible: root.showOverallPercentage
+                    width: Math.ceil(overallPercentageMetrics.advanceWidth)
+                    height: verticalPercentageLabel.implicitHeight
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: Number(DgopService.cpuUsage || 0).toFixed(0) + "%"
-                    color: Theme.widgetTextColor
-                    font.pixelSize: root.overallTextSize()
-                    font.weight: Font.Medium
+
+                    StyledText {
+                        id: verticalPercentageLabel
+
+                        anchors.fill: parent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        text: Number(DgopService.cpuUsage || 0).toFixed(0) + "%"
+                        color: Theme.widgetTextColor
+                        font.pixelSize: root.overallTextSize()
+                        font.weight: Font.Medium
+                    }
                 }
 
             }

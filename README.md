@@ -34,5 +34,5 @@ To install somewhere else, use:
 ## Current limits
 
 - top/bottom bars are the best-looking path right now
-- left/right bars currently fall back to horizontal strips
+- left/right bars still use horizontal strips, but they now fill inward from the bar edge
 - smoothness still depends on the host CPU refresh cadence
