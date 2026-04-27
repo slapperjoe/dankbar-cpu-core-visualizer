@@ -24,13 +24,19 @@ PluginComponent {
     property bool barHovered: false
     property bool popoutHovered: false
     property bool detailsPopoutOpen: false
+    property string hoveredSection: ""
     property var animatedCpuUsage: []
     property real animatedMemoryUsage: 0
-    property real animatedDiskUsage: 0
+    property var animatedDiskUsages: []
     readonly property real totalCpuUsage: root.clampUsage(Number(DgopService.cpuUsage || 0))
     readonly property real memoryUsageValue: root.clampUsage(Number(DgopService.memoryUsage || 0))
     readonly property var selectedDiskMountPaths: root.arraySetting("selectedDiskMountPaths", ["/"])
     readonly property var diskMountList: Array.isArray(DgopService.diskMounts) ? DgopService.diskMounts : []
+    readonly property var topMemoryProcesses: {
+        const procs = Array.isArray(DgopService.allProcesses) ? DgopService.allProcesses.slice() : [];
+        procs.sort((a, b) => (Number(b.memoryKB) || 0) - (Number(a.memoryKB) || 0));
+        return procs.slice(0, 8);
+    }
     readonly property var selectedDiskMounts: {
         let exactMatches = [];
         let fallback = [];
@@ -248,7 +254,22 @@ PluginComponent {
         next.length = targetLength;
         root.animatedCpuUsage = next;
         root.animatedMemoryUsage = root.syncUsageValue(Number(root.animatedMemoryUsage), root.memoryUsageValue, force);
-        root.animatedDiskUsage = root.syncUsageValue(Number(root.animatedDiskUsage), root.diskUsageValue, force);
+        let nextDisk = root.animatedDiskUsages ? root.animatedDiskUsages.slice() : [];
+        const diskCount = root.selectedDiskMounts.length;
+        for (let d = 0; d < diskCount; d++) {
+            const diskTarget = root.diskMountUsageFor(d);
+            const diskCurrent = Number(nextDisk[d]);
+            nextDisk[d] = root.syncUsageValue(diskCurrent, diskTarget, force);
+        }
+        nextDisk.length = diskCount;
+        root.animatedDiskUsages = nextDisk;
+    }
+
+    function diskMountUsageFor(index) {
+        if (index < 0 || index >= root.selectedDiskMounts.length)
+            return 0;
+
+        return root.clampUsage(root.diskMountPercent(root.selectedDiskMounts[index]));
     }
 
     function usageFor(index) {
@@ -324,6 +345,9 @@ PluginComponent {
         if (sectionKey === "cpu")
             return root.displayedCoreCount;
 
+        if (sectionKey === "disk")
+            return Math.max(1, root.selectedDiskMounts.length);
+
         return 1;
     }
 
@@ -332,7 +356,7 @@ PluginComponent {
             return root.memoryUsageValue;
 
         if (sectionKey === "disk")
-            return root.diskUsageValue;
+            return root.diskMountUsageFor(index);
 
         return root.usageFor(index);
     }
@@ -342,7 +366,7 @@ PluginComponent {
             return root.animatedMemoryUsage;
 
         if (sectionKey === "disk")
-            return root.animatedDiskUsage;
+            return Number(root.animatedDiskUsages[index]);
 
         return Number(root.animatedCpuUsage[index]);
     }
@@ -356,6 +380,9 @@ PluginComponent {
     }
 
     function sectionPercentageText(sectionKey) {
+        if (sectionKey === "disk")
+            return root.diskUsageValue.toFixed(0) + "%";
+
         return root.sectionUsageFor(sectionKey, 0).toFixed(0) + "%";
     }
 
@@ -372,7 +399,10 @@ PluginComponent {
         if (sectionKey === "memory")
             return root.colorMode === "soft" ? root.softPalette[11] : root.vividPalette[13];
 
-        return root.colorMode === "soft" ? root.softPalette[3] : root.vividPalette[3];
+        if (sectionKey === "disk")
+            return root.colorMode === "soft" ? root.softPalette[(index * 7 + 3) % root.softPalette.length] : root.vividPalette[(index * 7 + 3) % root.vividPalette.length];
+
+        return root.colorMode === "soft" ? root.softPalette[index % root.softPalette.length] : root.vividPalette[index % root.vividPalette.length];
     }
 
     function formatStorage(bytes) {
@@ -486,14 +516,10 @@ PluginComponent {
         const totalUsage = root.totalCpuUsage.toFixed(1);
         const hottestIndex = root.hottestCoreIndex();
         const hottestUsage = root.usageFor(hottestIndex).toFixed(0);
-        let summary = "CPU " + totalUsage + "%";
-        summary += "  |  Memory " + root.memoryUsageValue.toFixed(0) + "%";
-        summary += "  |  Disk " + root.diskUsageValue.toFixed(0) + "%";
+        let summary = "Total " + totalUsage + "%";
         summary += "  |  Hot core C" + hottestIndex + " " + hottestUsage + "%";
         if (DgopService.cpuTemperature > 0)
-            summary += "  |  " + Math.round(DgopService.cpuTemperature) + "C";
-
-        summary += "  |  Probe " + root.probeInterval + "ms";
+            summary += "  |  " + Math.round(DgopService.cpuTemperature) + "°C";
         return summary;
     }
 
@@ -543,7 +569,16 @@ PluginComponent {
 
         property string sectionKey: "cpu"
 
-        spacing: root.barGap
+        spacing: root.sectionPadding
+
+        HoverHandler {
+            onHoveredChanged: {
+                if (hovered)
+                    root.hoveredSection = horizontalSection.sectionKey;
+                else if (root.hoveredSection === horizontalSection.sectionKey)
+                    root.hoveredSection = "";
+            }
+        }
 
         Row {
             anchors.verticalCenter: parent.verticalCenter
@@ -583,7 +618,7 @@ PluginComponent {
         Row {
             visible: root.showOverallPercentage
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Math.max(2, root.barGap)
+            spacing: 2
 
             DankIcon {
                 name: root.sectionIcon(horizontalSection.sectionKey)
@@ -619,7 +654,16 @@ PluginComponent {
         property bool fillFromLeft: root.axis?.edge === "left"
 
         width: availableWidth
-        spacing: Math.max(2, root.barGap)
+        spacing: root.sectionPadding
+
+        HoverHandler {
+            onHoveredChanged: {
+                if (hovered)
+                    root.hoveredSection = verticalSection.sectionKey;
+                else if (root.hoveredSection === verticalSection.sectionKey)
+                    root.hoveredSection = "";
+            }
+        }
 
         Column {
             width: parent.width
@@ -661,7 +705,7 @@ PluginComponent {
         Row {
             visible: root.showOverallPercentage
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: Math.max(2, root.barGap)
+            spacing: 2
 
             DankIcon {
                 name: root.sectionIcon(verticalSection.sectionKey)
@@ -691,20 +735,20 @@ PluginComponent {
 
     layerNamespacePlugin: "cpu-core-visualizer"
     Component.onCompleted: {
-        DgopService.addRef(["cpu", "memory", "diskmounts"]);
+        DgopService.addRef(["cpu", "memory", "diskmounts", "processes"]);
         root.syncAnimatedUsage(true);
         DgopService.updateAllStats();
     }
     Component.onDestruction: {
         closePopoutTimer.stop();
-        DgopService.removeRef(["cpu", "memory", "diskmounts"]);
+        DgopService.removeRef(["cpu", "memory", "diskmounts", "processes"]);
     }
     onRawCoreUsageChanged: root.syncAnimatedUsage(root.animatedCpuUsage.length !== root.rawCoreUsage.length)
     onMemoryUsageValueChanged: root.syncAnimatedUsage(false)
-    onDiskUsageValueChanged: root.syncAnimatedUsage(false)
+    onSelectedDiskMountsChanged: root.syncAnimatedUsage(root.animatedDiskUsages.length !== root.selectedDiskMounts.length)
     onIsVerticalChanged: root.refreshBarsForLayoutChange()
     popoutWidth: 420
-    popoutHeight: 320
+    popoutHeight: 400
 
     Timer {
         id: closePopoutTimer
@@ -752,22 +796,22 @@ PluginComponent {
                         sectionKey: modelData
                         anchors.verticalCenter: parent.verticalCenter
                     }
+
                 }
 
             }
 
-            MouseArea {
+            HoverHandler {
                 id: horizontalHoverArea
 
-                anchors.fill: parent
-                acceptedButtons: Qt.NoButton
-                hoverEnabled: true
-                onContainsMouseChanged: {
-                    root.barHovered = containsMouse;
-                    if (containsMouse)
+                onHoveredChanged: {
+                    root.barHovered = hovered;
+                    if (hovered)
                         root.openDetailsPopout();
-                    else
+                    else {
+                        root.hoveredSection = "";
                         root.scheduleClosePopout();
+                    }
                 }
             }
 
@@ -795,22 +839,22 @@ PluginComponent {
                         sectionKey: modelData
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
+
                 }
 
             }
 
-            MouseArea {
+            HoverHandler {
                 id: verticalHoverArea
 
-                anchors.fill: parent
-                acceptedButtons: Qt.NoButton
-                hoverEnabled: true
-                onContainsMouseChanged: {
-                    root.barHovered = containsMouse;
-                    if (containsMouse)
+                onHoveredChanged: {
+                    root.barHovered = hovered;
+                    if (hovered)
                         root.openDetailsPopout();
-                    else
+                    else {
+                        root.hoveredSection = "";
                         root.scheduleClosePopout();
+                    }
                 }
             }
 
@@ -822,8 +866,24 @@ PluginComponent {
         PopoutComponent {
             id: detailsPopout
 
-            headerText: "CPU Core Visualizer"
-            detailsText: root.shortSummaryText()
+            headerText: {
+                if (root.hoveredSection === "memory")
+                    return "Memory";
+                if (root.hoveredSection === "disk")
+                    return "Storage";
+                return "CPU";
+            }
+            detailsText: {
+                if (root.hoveredSection === "memory") {
+                    const total = Number(DgopService.totalMemoryKB || 0);
+                    if (total <= 0)
+                        return "Waiting for memory stats";
+                    return DgopService.formatSystemMemory(DgopService.usedMemoryKB) + " / " + DgopService.formatSystemMemory(total) + "  |  " + root.memoryUsageValue.toFixed(0) + "%";
+                }
+                if (root.hoveredSection === "disk")
+                    return root.diskSelectionLabel;
+                return root.shortSummaryText();
+            }
             showCloseButton: false
 
             Connections {
@@ -862,96 +922,199 @@ PluginComponent {
                     width: parent.width
                     spacing: Theme.spacingS
 
-                    StyledText {
-                        width: parent.width
-                        text: "Samples refresh every " + root.probeInterval + "ms from the plugin timer via DgopService. CPU cores, memory, and disk usage animate independently."
-                        color: Theme.surfaceVariantText
-                        font.pixelSize: Theme.fontSizeSmall
-                        wrapMode: Text.WordWrap
-                    }
-
-                    Flow {
+                    // ── CPU / overview view ──────────────────────────────────
+                    Column {
+                        visible: root.hoveredSection === "" || root.hoveredSection === "cpu"
                         width: parent.width
                         spacing: Theme.spacingS
 
-                        Repeater {
-                            model: root.sectionKeys
+                        StyledText {
+                            width: parent.width
+                            text: "CPU cores"
+                            color: Theme.surfaceText
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.weight: Font.Bold
+                        }
 
-                            delegate: Rectangle {
-                                width: Math.max(120, (contentColumn.width - Theme.spacingS * 2) / 3)
-                                height: 64
-                                radius: Theme.cornerRadius
-                                color: Theme.surfaceContainerHigh
-                                border.width: 1
-                                border.color: Theme.outline
+                        Flow {
+                            width: parent.width
+                            spacing: Theme.spacingS
 
-                                DankIcon {
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: Theme.spacingM
-                                    anchors.top: parent.top
-                                    anchors.topMargin: Theme.spacingM
-                                    name: root.sectionIcon(modelData)
-                                    size: Theme.iconSize
-                                    color: root.sectionColorFor(modelData, 0)
+                            Repeater {
+                                model: root.displayedCoreCount
+
+                                delegate: Rectangle {
+                                    width: Math.max(110, (contentColumn.width - Theme.spacingS * 2) / 3)
+                                    height: 52
+                                    radius: Theme.cornerRadius
+                                    color: Theme.surfaceContainerHigh
+                                    border.width: 1
+                                    border.color: Theme.outline
+                                    clip: true
+
+                                    Rectangle {
+                                        anchors.top: parent.top
+                                        anchors.left: parent.left
+                                        width: root.cardFillWidth(index, parent.width)
+                                        height: parent.height
+                                        radius: Theme.cornerRadius
+                                        color: root.colorFor(index)
+                                        opacity: (root.colorMode === "mono" || root.colorMode === "base") ? 0.18 : 0.24
+
+                                        Behavior on width {
+                                            NumberAnimation {
+                                                duration: 120
+                                                easing.type: Easing.OutCubic
+                                            }
+
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: 8
+                                        height: 8
+                                        radius: 4
+                                        color: root.colorFor(index)
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: Theme.spacingM
+                                        anchors.top: parent.top
+                                        anchors.topMargin: Theme.spacingM
+                                    }
+
+                                    StyledText {
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: Theme.spacingM + 14
+                                        anchors.top: parent.top
+                                        anchors.topMargin: Theme.spacingS
+                                        text: "Core " + index
+                                        color: Theme.surfaceText
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        font.weight: Font.Medium
+                                    }
+
+                                    StyledText {
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: Theme.spacingM
+                                        anchors.top: parent.top
+                                        anchors.topMargin: Theme.spacingS
+                                        text: root.usageFor(index).toFixed(0) + "%"
+                                        color: Theme.surfaceText
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        font.weight: Font.Bold
+                                    }
+
+                                    StyledText {
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: Theme.spacingM
+                                        anchors.bottom: parent.bottom
+                                        anchors.bottomMargin: Theme.spacingS
+                                        text: root.usageLabel(index) + (index === root.hottestCoreIndex() ? "  |  hottest" : "")
+                                        color: Theme.surfaceVariantText
+                                        font.pixelSize: Theme.fontSizeSmall - 1
+                                    }
+
                                 }
 
-                                StyledText {
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: Theme.spacingM + Theme.iconSize + Theme.spacingS
-                                    anchors.top: parent.top
-                                    anchors.topMargin: Theme.spacingS
-                                    text: root.sectionTitle(modelData)
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeSmall
-                                    font.weight: Font.Medium
-                                }
+                            }
 
-                                StyledText {
-                                    anchors.right: parent.right
-                                    anchors.rightMargin: Theme.spacingM
-                                    anchors.top: parent.top
-                                    anchors.topMargin: Theme.spacingS
-                                    text: root.sectionPercentageText(modelData)
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeSmall
-                                    font.weight: Font.Bold
-                                }
+                        }
 
-                                StyledText {
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: Theme.spacingM
-                                    anchors.right: parent.right
-                                    anchors.rightMargin: Theme.spacingM
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: Theme.spacingS
-                                    text: root.sectionSummarySubtitle(modelData)
-                                    color: Theme.surfaceVariantText
-                                    font.pixelSize: Theme.fontSizeSmall - 1
-                                    wrapMode: Text.WordWrap
-                                    maximumLineCount: 2
-                                    elide: Text.ElideRight
+                    }
+
+                    // ── Memory view ──────────────────────────────────────────
+                    Column {
+                        visible: root.hoveredSection === "memory"
+                        width: parent.width
+                        spacing: Theme.spacingS
+
+                        Rectangle {
+                            width: parent.width
+                            height: 88
+                            radius: Theme.cornerRadius
+                            color: Theme.surfaceContainerHigh
+                            border.width: 1
+                            border.color: Theme.outline
+                            clip: true
+
+                            Rectangle {
+                                width: parent.width * (root.animatedMemoryUsage / 100)
+                                height: parent.height
+                                radius: parent.radius
+                                color: root.sectionColorFor("memory", 0)
+                                opacity: (root.colorMode === "mono" || root.colorMode === "base") ? 0.18 : 0.24
+
+                                Behavior on width {
+                                    NumberAnimation {
+                                        duration: root.animationDuration
+                                        easing.type: Easing.OutCubic
+                                    }
+
                                 }
                             }
+
+                            DankIcon {
+                                anchors.left: parent.left
+                                anchors.leftMargin: Theme.spacingM
+                                anchors.top: parent.top
+                                anchors.topMargin: Theme.spacingM
+                                name: "sd_card"
+                                size: Theme.iconSize
+                                color: root.sectionColorFor("memory", 0)
+                            }
+
+                            StyledText {
+                                anchors.left: parent.left
+                                anchors.leftMargin: Theme.spacingM + Theme.iconSize + Theme.spacingS
+                                anchors.top: parent.top
+                                anchors.topMargin: Theme.spacingS
+                                text: "Memory"
+                                color: Theme.surfaceText
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.weight: Font.Medium
+                            }
+
+                            StyledText {
+                                anchors.right: parent.right
+                                anchors.rightMargin: Theme.spacingM
+                                anchors.top: parent.top
+                                anchors.topMargin: Theme.spacingS
+                                text: root.memoryUsageValue.toFixed(0) + "%"
+                                color: Theme.surfaceText
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.weight: Font.Bold
+                            }
+
+                            StyledText {
+                                anchors.left: parent.left
+                                anchors.leftMargin: Theme.spacingM
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: Theme.spacingS
+                                text: {
+                                    const total = Number(DgopService.totalMemoryKB || 0);
+                                    if (total <= 0)
+                                        return "Waiting for memory stats";
+                                    return DgopService.formatSystemMemory(DgopService.usedMemoryKB) + " used  /  " + DgopService.formatSystemMemory(total) + " total";
+                                }
+                                color: Theme.surfaceVariantText
+                                font.pixelSize: Theme.fontSizeSmall - 1
+                            }
+
                         }
-                    }
 
-                    StyledText {
-                        width: parent.width
-                        text: "CPU cores"
-                        color: Theme.surfaceText
-                        font.pixelSize: Theme.fontSizeSmall
-                        font.weight: Font.Bold
-                    }
-
-                    Flow {
-                        width: parent.width
-                        spacing: Theme.spacingS
+                        StyledText {
+                            width: parent.width
+                            text: "Top processes by memory"
+                            color: Theme.surfaceText
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.weight: Font.Bold
+                            visible: root.topMemoryProcesses.length > 0
+                        }
 
                         Repeater {
-                            model: root.displayedCoreCount
+                            model: root.topMemoryProcesses
 
                             delegate: Rectangle {
-                                width: Math.max(110, (contentColumn.width - Theme.spacingS * 2) / 3)
+                                width: parent.width
                                 height: 52
                                 radius: Theme.cornerRadius
                                 color: Theme.surfaceContainerHigh
@@ -960,14 +1123,17 @@ PluginComponent {
                                 clip: true
 
                                 Rectangle {
-                                    width: root.cardFillWidth(index, parent.width)
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    width: parent.width * Math.min(1, (Number(modelData.memoryPercent) || 0) / 100)
                                     height: parent.height
-                                    color: root.colorFor(index)
+                                    radius: Theme.cornerRadius
+                                    color: root.sectionColorFor("memory", 0)
                                     opacity: (root.colorMode === "mono" || root.colorMode === "base") ? 0.18 : 0.24
 
                                     Behavior on width {
                                         NumberAnimation {
-                                            duration: 120
+                                            duration: root.animationDuration
                                             easing.type: Easing.OutCubic
                                         }
 
@@ -978,7 +1144,7 @@ PluginComponent {
                                     width: 8
                                     height: 8
                                     radius: 4
-                                    color: root.colorFor(index)
+                                    color: root.sectionColorFor("memory", 0)
                                     anchors.left: parent.left
                                     anchors.leftMargin: Theme.spacingM
                                     anchors.top: parent.top
@@ -988,20 +1154,25 @@ PluginComponent {
                                 StyledText {
                                     anchors.left: parent.left
                                     anchors.leftMargin: Theme.spacingM + 14
+                                    anchors.right: memProcMemText.left
+                                    anchors.rightMargin: Theme.spacingS
                                     anchors.top: parent.top
                                     anchors.topMargin: Theme.spacingS
-                                    text: "Core " + index
+                                    text: modelData.command || "unknown"
                                     color: Theme.surfaceText
                                     font.pixelSize: Theme.fontSizeSmall
                                     font.weight: Font.Medium
+                                    elide: Text.ElideRight
                                 }
 
                                 StyledText {
+                                    id: memProcMemText
+
                                     anchors.right: parent.right
                                     anchors.rightMargin: Theme.spacingM
                                     anchors.top: parent.top
                                     anchors.topMargin: Theme.spacingS
-                                    text: root.usageFor(index).toFixed(0) + "%"
+                                    text: root.formatStorage(Number(modelData.memoryKB) * 1024)
                                     color: Theme.surfaceText
                                     font.pixelSize: Theme.fontSizeSmall
                                     font.weight: Font.Bold
@@ -1012,7 +1183,97 @@ PluginComponent {
                                     anchors.leftMargin: Theme.spacingM
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: Theme.spacingS
-                                    text: root.usageLabel(index) + (index === root.hottestCoreIndex() ? "  |  hottest" : "")
+                                    text: (Number(modelData.memoryPercent) || 0).toFixed(1) + "% mem  |  " + (Number(modelData.cpu) || 0).toFixed(1) + "% cpu  |  pid " + (modelData.pid || "—")
+                                    color: Theme.surfaceVariantText
+                                    font.pixelSize: Theme.fontSizeSmall - 1
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                    // ── Disk view ────────────────────────────────────────────
+                    Column {
+                        visible: root.hoveredSection === "disk"
+                        width: parent.width
+                        spacing: Theme.spacingS
+
+                        Repeater {
+                            model: root.selectedDiskMounts
+
+                            delegate: Rectangle {
+                                width: parent.width
+                                height: 72
+                                radius: Theme.cornerRadius
+                                color: Theme.surfaceContainerHigh
+                                border.width: 1
+                                border.color: Theme.outline
+                                clip: true
+
+                                Rectangle {
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    width: parent.width * (root.diskMountUsageFor(index) / 100)
+                                    height: parent.height
+                                    radius: Theme.cornerRadius
+                                    color: root.sectionColorFor("disk", index)
+                                    opacity: (root.colorMode === "mono" || root.colorMode === "base") ? 0.18 : 0.24
+
+                                    Behavior on width {
+                                        NumberAnimation {
+                                            duration: root.animationDuration
+                                            easing.type: Easing.OutCubic
+                                        }
+
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: 8
+                                    height: 8
+                                    radius: 4
+                                    color: root.sectionColorFor("disk", index)
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingM
+                                    anchors.top: parent.top
+                                    anchors.topMargin: Theme.spacingM + 2
+                                }
+
+                                StyledText {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingM + 14
+                                    anchors.top: parent.top
+                                    anchors.topMargin: Theme.spacingS
+                                    text: root.diskMountPath(modelData) || "Unknown"
+                                    color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: Font.Medium
+                                }
+
+                                StyledText {
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: Theme.spacingM
+                                    anchors.top: parent.top
+                                    anchors.topMargin: Theme.spacingS
+                                    text: root.diskMountUsageFor(index).toFixed(0) + "%"
+                                    color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: Font.Bold
+                                }
+
+                                StyledText {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingM
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: Theme.spacingS
+                                    text: {
+                                        const total = Number(modelData && modelData.total !== undefined ? modelData.total : 0);
+                                        if (total <= 0)
+                                            return "Usage data unavailable";
+                                        return root.formatStorage(modelData.used) + " used  /  " + root.formatStorage(total) + " total";
+                                    }
                                     color: Theme.surfaceVariantText
                                     font.pixelSize: Theme.fontSizeSmall - 1
                                 }
