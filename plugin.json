@@ -1,11 +1,11 @@
 {
     "id": "cpuCoreVisualizer",
     "name": "CPU Core Visualizer",
-    "description": "Per-core CPU bars plus memory and disk usage strips for DankBar",
+    "description": "Per-core CPU bars plus memory, disk, and network throughput history for DankBar",
     "version": "0.1.0",
     "author": "Mark + Copilot",
     "type": "widget",
-    "capabilities": ["dankbar-widget", "monitoring", "cpu-visualizer", "memory-visualizer", "disk-visualizer"],
+    "capabilities": ["dankbar-widget", "monitoring", "cpu-visualizer", "memory-visualizer", "disk-visualizer", "network-visualizer"],
     "component": "./CpuCoreVisualizerWidget.qml",
     "icon": "equalizer",
     "settings": "./CpuCoreVisualizerSettings.qml",

@@ -1,13 +1,16 @@
 # CPU Core Visualizer
 
-Per-core CPU bars plus memory and disk usage strips for DankBar / DankMaterialShell.
+Per-core CPU bars plus memory, disk, and network throughput history for DankBar / DankMaterialShell.
 
 ## What it does
 
 - one bar per CPU core, plus dedicated memory and disk sections
+- a rolling one-minute network chart with separate download and upload scales
+- slot-based section visibility and ordering for CPU, memory, disk, and network
 - vivid, soft-dark, mono, or UI-base rendering
 - compact icons to distinguish CPU, memory, and disk sections
 - selectable disk partitions for the disk usage section
+- configurable network chart width, height, line thickness, and grid
 - optional usage percentages plus adjustable probe time and smoother motion
 
 ## Install

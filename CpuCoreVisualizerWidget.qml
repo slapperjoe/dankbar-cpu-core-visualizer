@@ -18,6 +18,19 @@ PluginComponent {
     property int animationDuration: Math.max(120, Math.round(numberSetting("animationDuration", 650)))
     property int cornerRadius: Math.max(0, Math.round(numberSetting("cornerRadius", 2)))
     property int probeInterval: Math.max(250, Math.round(numberSetting("probeInterval", 1000)))
+    property int networkChartWidth: Math.max(64, Math.round(numberSetting("networkChartWidth", 120)))
+    property int networkChartHeight: Math.max(12, Math.round(numberSetting("networkChartHeight", 24)))
+    property real networkLineWidth: Math.max(1, Math.min(4, numberSetting("networkLineWidth", 2)))
+    property bool showNetworkGrid: boolSetting("showNetworkGrid", true)
+    property var configuredSectionSlots: root.arraySetting("sectionSlots", [])
+    property bool showCpuSection: boolSetting("showCpuSection", true)
+    property bool showMemorySection: boolSetting("showMemorySection", true)
+    property bool showDiskSection: boolSetting("showDiskSection", true)
+    property bool showNetworkSection: boolSetting("showNetworkSection", true)
+    property int cpuSectionOrder: Math.max(1, Math.min(4, Math.round(numberSetting("cpuSectionOrder", 1))))
+    property int memorySectionOrder: Math.max(1, Math.min(4, Math.round(numberSetting("memorySectionOrder", 2))))
+    property int diskSectionOrder: Math.max(1, Math.min(4, Math.round(numberSetting("diskSectionOrder", 3))))
+    property int networkSectionOrder: Math.max(1, Math.min(4, Math.round(numberSetting("networkSectionOrder", 4))))
     property real smoothingFactor: Math.max(0.08, Math.min(0.85, numberSetting("smoothingPercent", 28) / 100))
     property string colorMode: stringSetting("colorMode", "vivid")
     property bool showOverallPercentage: boolSetting("showOverallPercentage", true)
@@ -28,8 +41,32 @@ PluginComponent {
     property var animatedCpuUsage: []
     property real animatedMemoryUsage: 0
     property var animatedDiskUsages: []
+    property var networkDownloadHistory: []
+    property var networkUploadHistory: []
+    property bool pendingNetworkHistoryCapture: false
     readonly property real totalCpuUsage: root.clampUsage(Number(DgopService.cpuUsage || 0))
     readonly property real memoryUsageValue: root.clampUsage(Number(DgopService.memoryUsage || 0))
+    readonly property int networkHistoryWindowMs: 60000
+    readonly property int networkHistorySampleLimit: Math.max(12, Math.round(root.networkHistoryWindowMs / root.probeInterval) + 1)
+    readonly property real currentDownloadRate: Math.max(0, Number(DgopService.networkRxRate || 0))
+    readonly property real currentUploadRate: Math.max(0, Number(DgopService.networkTxRate || 0))
+    readonly property real peakDownloadRate: root.networkPeak(root.networkDownloadHistory, root.currentDownloadRate)
+    readonly property real peakUploadRate: root.networkPeak(root.networkUploadHistory, root.currentUploadRate)
+    readonly property string activeNetworkIp: {
+        if (DgopService.wifiConnected && DgopService.wifiIP)
+            return DgopService.wifiIP;
+
+        if (DgopService.ethernetConnected && DgopService.ethernetIP)
+            return DgopService.ethernetIP;
+
+        if (NetworkService.wifiConnected && NetworkService.wifiIP)
+            return NetworkService.wifiIP;
+
+        if (NetworkService.ethernetConnected && NetworkService.ethernetIP)
+            return NetworkService.ethernetIP;
+
+        return DgopService.wifiIP || DgopService.ethernetIP || NetworkService.wifiIP || NetworkService.ethernetIP || "";
+    }
     readonly property var selectedDiskMountPaths: root.arraySetting("selectedDiskMountPaths", ["/"])
     readonly property var diskMountList: Array.isArray(DgopService.diskMounts) ? DgopService.diskMounts : []
     readonly property var topMemoryProcesses: {
@@ -129,7 +166,45 @@ PluginComponent {
 
         return parts.join("  |  ");
     }
-    readonly property var sectionKeys: ["cpu", "memory", "disk"]
+    readonly property var validSectionKeys: ["cpu", "memory", "disk", "network"]
+    readonly property var enabledOrderedSectionKeys: {
+        const configured = root.normalizedVisibleSectionKeys(root.configuredSectionSlots);
+        if (configured.length > 0 || root.configuredSectionSlots.length > 0)
+            return configured;
+
+        const sections = [{
+            key: "cpu",
+            enabled: root.showCpuSection,
+            order: root.cpuSectionOrder,
+            fallbackIndex: 0
+        }, {
+            key: "memory",
+            enabled: root.showMemorySection,
+            order: root.memorySectionOrder,
+            fallbackIndex: 1
+        }, {
+            key: "disk",
+            enabled: root.showDiskSection,
+            order: root.diskSectionOrder,
+            fallbackIndex: 2
+        }, {
+            key: "network",
+            enabled: root.showNetworkSection,
+            order: root.networkSectionOrder,
+            fallbackIndex: 3
+        }];
+
+        let enabled = sections.filter(section => section.enabled);
+        enabled.sort((left, right) => {
+            if (left.order !== right.order)
+                return left.order - right.order;
+
+            return left.fallbackIndex - right.fallbackIndex;
+        });
+
+        return enabled.map(section => section.key);
+    }
+    readonly property string defaultPopoutSection: root.enabledOrderedSectionKeys.length > 0 ? root.enabledOrderedSectionKeys[0] : ""
     readonly property int sectionGap: root.sectionPadding
     readonly property int compactIconSize: Math.max(10, Math.min(root.widgetThickness - root.padding * 2, Theme.barIconSize(root.barThickness, -8, root.barConfig?.maximizeWidgetIcons, root.barConfig?.iconScale)))
     readonly property var rawCoreUsage: {
@@ -328,6 +403,9 @@ PluginComponent {
         if (sectionKey === "disk")
             return "storage";
 
+        if (sectionKey === "network")
+            return "network_check";
+
         return "memory";
     }
 
@@ -338,7 +416,30 @@ PluginComponent {
         if (sectionKey === "disk")
             return "Disk";
 
+        if (sectionKey === "network")
+            return "Network";
+
         return "CPU";
+    }
+
+    function normalizedVisibleSectionKeys(candidate) {
+        let normalized = [];
+        let seen = {};
+        const source = Array.isArray(candidate) ? candidate : [];
+        for (let i = 0; i < source.length; i++) {
+            const key = String(source[i] || "");
+            if (key === "off" || key.length <= 0)
+                continue;
+            if (root.validSectionKeys.indexOf(key) === -1 || seen[key])
+                continue;
+            normalized.push(key);
+            seen[key] = true;
+        }
+        return normalized;
+    }
+
+    function isSectionVisible(sectionKey) {
+        return root.enabledOrderedSectionKeys.indexOf(sectionKey) !== -1;
     }
 
     function sectionBarCount(sectionKey) {
@@ -358,6 +459,9 @@ PluginComponent {
         if (sectionKey === "disk")
             return root.diskMountUsageFor(index);
 
+        if (sectionKey === "network")
+            return 0;
+
         return root.usageFor(index);
     }
 
@@ -367,6 +471,9 @@ PluginComponent {
 
         if (sectionKey === "disk")
             return Number(root.animatedDiskUsages[index]);
+
+        if (sectionKey === "network")
+            return 0;
 
         return Number(root.animatedCpuUsage[index]);
     }
@@ -380,6 +487,9 @@ PluginComponent {
     }
 
     function sectionPercentageText(sectionKey) {
+        if (sectionKey === "network")
+            return root.formatCompactNetworkSpeed(root.currentDownloadRate) + " / " + root.formatCompactNetworkSpeed(root.currentUploadRate);
+
         if (sectionKey === "disk")
             return root.diskUsageValue.toFixed(0) + "%";
 
@@ -402,6 +512,9 @@ PluginComponent {
         if (sectionKey === "disk")
             return root.colorMode === "soft" ? root.softPalette[(index * 7 + 3) % root.softPalette.length] : root.vividPalette[(index * 7 + 3) % root.vividPalette.length];
 
+        if (sectionKey === "network")
+            return index === 0 ? Theme.info : Theme.error;
+
         return root.colorMode === "soft" ? root.softPalette[index % root.softPalette.length] : root.vividPalette[index % root.vividPalette.length];
     }
 
@@ -422,6 +535,70 @@ PluginComponent {
         return scaled.toFixed(decimals) + " " + units[unitIndex];
     }
 
+    function formatNetworkSpeed(bytesPerSecond) {
+        const value = Math.max(0, Number(bytesPerSecond || 0));
+        if (value < 1024)
+            return value.toFixed(0) + " B/s";
+
+        if (value < 1024 * 1024)
+            return (value / 1024).toFixed(value >= 10 * 1024 ? 0 : 1) + " KB/s";
+
+        if (value < 1024 * 1024 * 1024)
+            return (value / (1024 * 1024)).toFixed(value >= 10 * 1024 * 1024 ? 0 : 1) + " MB/s";
+
+        return (value / (1024 * 1024 * 1024)).toFixed(1) + " GB/s";
+    }
+
+    function formatCompactNetworkSpeed(bytesPerSecond) {
+        const value = Math.max(0, Number(bytesPerSecond || 0));
+        if (value < 1024)
+            return value.toFixed(0) + "B/s";
+
+        if (value < 1024 * 1024)
+            return (value / 1024).toFixed(value >= 10 * 1024 ? 0 : 1) + "K/s";
+
+        if (value < 1024 * 1024 * 1024)
+            return (value / (1024 * 1024)).toFixed(value >= 10 * 1024 * 1024 ? 0 : 1) + "M/s";
+
+        return (value / (1024 * 1024 * 1024)).toFixed(1) + "G/s";
+    }
+
+    function trimNetworkHistory(values) {
+        let trimmed = Array.isArray(values) ? values.slice() : [];
+        if (trimmed.length > root.networkHistorySampleLimit)
+            trimmed = trimmed.slice(trimmed.length - root.networkHistorySampleLimit);
+        return trimmed;
+    }
+
+    function networkPeak(values, currentValue) {
+        let peak = Math.max(1, Number(currentValue || 0));
+        const series = Array.isArray(values) ? values : [];
+        for (let i = 0; i < series.length; i++)
+            peak = Math.max(peak, Number(series[i] || 0));
+        return peak;
+    }
+
+    function appendNetworkHistorySample(downloadRate, uploadRate) {
+        let nextDownload = root.networkDownloadHistory ? root.networkDownloadHistory.slice() : [];
+        let nextUpload = root.networkUploadHistory ? root.networkUploadHistory.slice() : [];
+        nextDownload.push(Math.max(0, Number(downloadRate || 0)));
+        nextUpload.push(Math.max(0, Number(uploadRate || 0)));
+        root.networkDownloadHistory = root.trimNetworkHistory(nextDownload);
+        root.networkUploadHistory = root.trimNetworkHistory(nextUpload);
+    }
+
+    function queueNetworkHistoryCapture() {
+        if (root.pendingNetworkHistoryCapture)
+            return;
+
+        root.pendingNetworkHistoryCapture = true;
+        networkHistoryCaptureTimer.restart();
+    }
+
+    function networkRateSubtitle() {
+        return "↓ " + root.formatNetworkSpeed(root.currentDownloadRate) + "  |  ↑ " + root.formatNetworkSpeed(root.currentUploadRate);
+    }
+
     function sectionSummarySubtitle(sectionKey) {
         if (sectionKey === "memory") {
             const total = Number(DgopService.totalMemoryKB || 0);
@@ -434,6 +611,9 @@ PluginComponent {
         if (sectionKey === "disk") {
             return root.diskUsageSubtitle;
         }
+
+        if (sectionKey === "network")
+            return root.networkRateSubtitle();
 
         const shownCores = root.displayedCoreCount;
         const totalCores = root.rawCoreUsage.length;
@@ -492,6 +672,7 @@ PluginComponent {
 
         let summary = "Memory " + root.memoryUsageValue.toFixed(0) + "%";
         summary += "  |  Disk " + root.diskUsageValue.toFixed(0) + "%";
+        summary += "  |  Net " + root.formatCompactNetworkSpeed(root.currentDownloadRate) + " down / " + root.formatCompactNetworkSpeed(root.currentUploadRate) + " up";
         summary += "  |  Hottest core C" + hottestIndex + " " + hottestUsage + "%";
         if (shownCores < totalCores)
             summary += "  |  Showing " + shownCores + "/" + totalCores + " cores";
@@ -508,6 +689,7 @@ PluginComponent {
         }
         if (root.diskUsageTooltipText.length > 0)
             lines.push("Disk mounts: " + root.diskUsageTooltipText);
+        lines.push("Network peaks (1m): down " + root.formatNetworkSpeed(root.peakDownloadRate) + "  |  up " + root.formatNetworkSpeed(root.peakUploadRate));
 
         return header + "\n" + summary + (lines.length > 0 ? "\n" + lines.join("\n") : "");
     }
@@ -518,6 +700,7 @@ PluginComponent {
         const hottestUsage = root.usageFor(hottestIndex).toFixed(0);
         let summary = "Total " + totalUsage + "%";
         summary += "  |  Hot core C" + hottestIndex + " " + hottestUsage + "%";
+        summary += "  |  Net " + root.formatCompactNetworkSpeed(root.currentDownloadRate) + "/" + root.formatCompactNetworkSpeed(root.currentUploadRate);
         if (DgopService.cpuTemperature > 0)
             summary += "  |  " + Math.round(DgopService.cpuTemperature) + "°C";
         return summary;
@@ -562,6 +745,195 @@ PluginComponent {
         font.pixelSize: root.overallTextSize()
         font.weight: Font.Medium
         text: "100%"
+    }
+
+    TextMetrics {
+        id: networkLabelMetrics
+
+        font.pixelSize: root.overallTextSize()
+        font.weight: Font.Medium
+        text: "↓ 888.8M"
+    }
+
+    component NetworkHistoryChart: Canvas {
+        property var downloadSeries: []
+        property var uploadSeries: []
+        property real downloadPeak: 1
+        property real uploadPeak: 1
+        property color downloadColor: Theme.info
+        property color uploadColor: Theme.error
+        property real strokeWidth: 2
+        property bool gridVisible: true
+
+        onDownloadSeriesChanged: requestPaint()
+        onUploadSeriesChanged: requestPaint()
+        onDownloadPeakChanged: requestPaint()
+        onUploadPeakChanged: requestPaint()
+        onDownloadColorChanged: requestPaint()
+        onUploadColorChanged: requestPaint()
+        onStrokeWidthChanged: requestPaint()
+        onGridVisibleChanged: requestPaint()
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+
+        function drawSeries(ctx, series, peak, strokeColor) {
+            if (!Array.isArray(series) || series.length <= 0)
+                return;
+
+            ctx.beginPath();
+            ctx.lineWidth = strokeWidth;
+            ctx.strokeStyle = strokeColor;
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+
+            for (let i = 0; i < series.length; i++) {
+                const x = series.length <= 1 ? width / 2 : (i / (series.length - 1)) * width;
+                const ratio = Math.max(0, Math.min(1, Number(series[i] || 0) / Math.max(1, peak)));
+                const y = height - ratio * height;
+                if (i === 0)
+                    ctx.moveTo(x, y);
+                else
+                    ctx.lineTo(x, y);
+            }
+
+            ctx.stroke();
+        }
+
+        onPaint: {
+            const ctx = getContext("2d");
+            ctx.clearRect(0, 0, width, height);
+
+            if (gridVisible) {
+                ctx.strokeStyle = Theme.outline;
+                ctx.globalAlpha = 0.3;
+                ctx.lineWidth = 1;
+                for (let row = 1; row <= 3; row++) {
+                    const y = (height / 4) * row;
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(width, y);
+                    ctx.stroke();
+                }
+
+                ctx.globalAlpha = 1;
+            }
+
+            drawSeries(ctx, downloadSeries, downloadPeak, downloadColor);
+            drawSeries(ctx, uploadSeries, uploadPeak, uploadColor);
+        }
+    }
+
+    component HorizontalNetworkSection: Row {
+        id: horizontalNetwork
+
+        spacing: root.barGap
+
+        HoverHandler {
+            onHoveredChanged: {
+                if (hovered)
+                    root.hoveredSection = "network";
+                else if (root.hoveredSection === "network")
+                    root.hoveredSection = "";
+            }
+        }
+
+        StyledText {
+            width: Math.ceil(networkLabelMetrics.advanceWidth)
+            anchors.verticalCenter: parent.verticalCenter
+            horizontalAlignment: Text.AlignRight
+            text: "↓ " + root.formatCompactNetworkSpeed(root.currentDownloadRate)
+            color: Theme.info
+            font.pixelSize: root.overallTextSize()
+            font.weight: Font.Medium
+        }
+
+        Rectangle {
+            width: root.networkChartWidth
+            height: Math.max(root.networkChartHeight, root.minBarHeight + 1)
+            anchors.verticalCenter: parent.verticalCenter
+            radius: Math.min(root.cornerRadius + 1, height / 2)
+            color: Theme.surfaceContainerHigh
+            border.width: 1
+            border.color: Theme.outline
+            clip: true
+
+            NetworkHistoryChart {
+                anchors.fill: parent
+                anchors.margins: 1
+                downloadSeries: root.networkDownloadHistory
+                uploadSeries: root.networkUploadHistory
+                downloadPeak: root.peakDownloadRate
+                uploadPeak: root.peakUploadRate
+                strokeWidth: root.networkLineWidth
+                gridVisible: root.showNetworkGrid
+            }
+        }
+
+        StyledText {
+            width: Math.ceil(networkLabelMetrics.advanceWidth)
+            anchors.verticalCenter: parent.verticalCenter
+            text: "↑ " + root.formatCompactNetworkSpeed(root.currentUploadRate)
+            color: Theme.error
+            font.pixelSize: root.overallTextSize()
+            font.weight: Font.Medium
+        }
+    }
+
+    component VerticalNetworkSection: Column {
+        id: verticalNetwork
+
+        property int availableWidth: Math.max(root.widgetThickness - root.padding * 2, root.minBarHeight + 1)
+
+        width: availableWidth
+        spacing: root.barGap
+
+        HoverHandler {
+            onHoveredChanged: {
+                if (hovered)
+                    root.hoveredSection = "network";
+                else if (root.hoveredSection === "network")
+                    root.hoveredSection = "";
+            }
+        }
+
+        StyledText {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            text: "↓ " + root.formatCompactNetworkSpeed(root.currentDownloadRate)
+            color: Theme.info
+            font.pixelSize: Math.max(8, root.overallTextSize() - 1)
+            font.weight: Font.Medium
+        }
+
+        Rectangle {
+            width: parent.width
+            height: Math.max(root.networkChartHeight * 2, root.barWidth * 3)
+            radius: Math.min(root.cornerRadius + 1, height / 3)
+            color: Theme.surfaceContainerHigh
+            border.width: 1
+            border.color: Theme.outline
+            clip: true
+
+            NetworkHistoryChart {
+                anchors.fill: parent
+                anchors.margins: 1
+                downloadSeries: root.networkDownloadHistory
+                uploadSeries: root.networkUploadHistory
+                downloadPeak: root.peakDownloadRate
+                uploadPeak: root.peakUploadRate
+                strokeWidth: root.networkLineWidth
+                gridVisible: root.showNetworkGrid
+            }
+        }
+
+        StyledText {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            text: "↑ " + root.formatCompactNetworkSpeed(root.currentUploadRate)
+            color: Theme.error
+            font.pixelSize: Math.max(8, root.overallTextSize() - 1)
+            font.weight: Font.Medium
+        }
     }
 
     component HorizontalMetricSection: Row {
@@ -733,22 +1105,73 @@ PluginComponent {
         }
     }
 
+    Component {
+        id: horizontalMetricSectionComponent
+
+        HorizontalMetricSection {
+        }
+    }
+
+    Component {
+        id: horizontalNetworkSectionComponent
+
+        HorizontalNetworkSection {
+        }
+    }
+
+    Component {
+        id: verticalMetricSectionComponent
+
+        VerticalMetricSection {
+        }
+    }
+
+    Component {
+        id: verticalNetworkSectionComponent
+
+        VerticalNetworkSection {
+        }
+    }
+
     layerNamespacePlugin: "cpu-core-visualizer"
     Component.onCompleted: {
-        DgopService.addRef(["cpu", "memory", "diskmounts", "processes"]);
+        DgopService.addRef(["cpu", "memory", "diskmounts", "processes", "network"]);
         root.syncAnimatedUsage(true);
+        root.appendNetworkHistorySample(root.currentDownloadRate, root.currentUploadRate);
         DgopService.updateAllStats();
+        root.queueNetworkHistoryCapture();
     }
     Component.onDestruction: {
         closePopoutTimer.stop();
-        DgopService.removeRef(["cpu", "memory", "diskmounts", "processes"]);
+        networkHistoryCaptureTimer.stop();
+        DgopService.removeRef(["cpu", "memory", "diskmounts", "processes", "network"]);
     }
     onRawCoreUsageChanged: root.syncAnimatedUsage(root.animatedCpuUsage.length !== root.rawCoreUsage.length)
     onMemoryUsageValueChanged: root.syncAnimatedUsage(false)
     onSelectedDiskMountsChanged: root.syncAnimatedUsage(root.animatedDiskUsages.length !== root.selectedDiskMounts.length)
+    onEnabledOrderedSectionKeysChanged: {
+        if (root.hoveredSection.length > 0 && !root.isSectionVisible(root.hoveredSection))
+            root.hoveredSection = "";
+    }
+    onNetworkHistorySampleLimitChanged: {
+        root.networkDownloadHistory = root.trimNetworkHistory(root.networkDownloadHistory);
+        root.networkUploadHistory = root.trimNetworkHistory(root.networkUploadHistory);
+    }
     onIsVerticalChanged: root.refreshBarsForLayoutChange()
     popoutWidth: 420
     popoutHeight: 400
+
+    Connections {
+        target: DgopService
+
+        function onNetworkRxRateChanged() {
+            root.queueNetworkHistoryCapture();
+        }
+
+        function onNetworkTxRateChanged() {
+            root.queueNetworkHistoryCapture();
+        }
+    }
 
     Timer {
         id: closePopoutTimer
@@ -764,7 +1187,21 @@ PluginComponent {
         interval: root.probeInterval
         repeat: true
         running: true
-        onTriggered: DgopService.updateAllStats()
+        onTriggered: {
+            DgopService.updateAllStats();
+            root.queueNetworkHistoryCapture();
+        }
+    }
+
+    Timer {
+        id: networkHistoryCaptureTimer
+
+        interval: 40
+        repeat: false
+        onTriggered: {
+            root.pendingNetworkHistoryCapture = false;
+            root.appendNetworkHistorySample(root.currentDownloadRate, root.currentUploadRate);
+        }
     }
 
     Timer {
@@ -790,11 +1227,17 @@ PluginComponent {
                 spacing: root.sectionGap
 
                 Repeater {
-                    model: root.sectionKeys
+                    model: root.enabledOrderedSectionKeys
 
-                    delegate: HorizontalMetricSection {
-                        sectionKey: modelData
+                    delegate: Loader {
                         anchors.verticalCenter: parent.verticalCenter
+                        sourceComponent: modelData === "network" ? horizontalNetworkSectionComponent : horizontalMetricSectionComponent
+
+                        property string resolvedSectionKey: modelData
+                        onLoaded: {
+                            if (item && item.sectionKey !== undefined)
+                                item.sectionKey = resolvedSectionKey;
+                        }
                     }
 
                 }
@@ -833,11 +1276,17 @@ PluginComponent {
                 spacing: root.sectionGap
 
                 Repeater {
-                    model: root.sectionKeys
+                    model: root.enabledOrderedSectionKeys
 
-                    delegate: VerticalMetricSection {
-                        sectionKey: modelData
+                    delegate: Loader {
                         anchors.horizontalCenter: parent.horizontalCenter
+                        sourceComponent: modelData === "network" ? verticalNetworkSectionComponent : verticalMetricSectionComponent
+
+                        property string resolvedSectionKey: modelData
+                        onLoaded: {
+                            if (item && item.sectionKey !== undefined)
+                                item.sectionKey = resolvedSectionKey;
+                        }
                     }
 
                 }
@@ -867,21 +1316,29 @@ PluginComponent {
             id: detailsPopout
 
             headerText: {
-                if (root.hoveredSection === "memory")
+                if (root.defaultPopoutSection === "")
+                    return "Details";
+                if ((root.hoveredSection || root.defaultPopoutSection) === "memory")
                     return "Memory";
-                if (root.hoveredSection === "disk")
+                if ((root.hoveredSection || root.defaultPopoutSection) === "disk")
                     return "Storage";
+                if ((root.hoveredSection || root.defaultPopoutSection) === "network")
+                    return "Network";
                 return "CPU";
             }
             detailsText: {
-                if (root.hoveredSection === "memory") {
+                if ((root.hoveredSection || root.defaultPopoutSection) === "memory") {
                     const total = Number(DgopService.totalMemoryKB || 0);
                     if (total <= 0)
                         return "Waiting for memory stats";
                     return DgopService.formatSystemMemory(DgopService.usedMemoryKB) + " / " + DgopService.formatSystemMemory(total) + "  |  " + root.memoryUsageValue.toFixed(0) + "%";
                 }
-                if (root.hoveredSection === "disk")
+                if ((root.hoveredSection || root.defaultPopoutSection) === "disk")
                     return root.diskSelectionLabel;
+                if ((root.hoveredSection || root.defaultPopoutSection) === "network")
+                    return "";
+                if (root.defaultPopoutSection === "")
+                    return "Enable at least one section to show data here";
                 return root.shortSummaryText();
             }
             showCloseButton: false
@@ -924,7 +1381,7 @@ PluginComponent {
 
                     // ── CPU / overview view ──────────────────────────────────
                     Column {
-                        visible: root.hoveredSection === "" || root.hoveredSection === "cpu"
+                        visible: (root.hoveredSection || root.defaultPopoutSection) === "cpu"
                         width: parent.width
                         spacing: Theme.spacingS
 
@@ -1023,7 +1480,7 @@ PluginComponent {
 
                     // ── Memory view ──────────────────────────────────────────
                     Column {
-                        visible: root.hoveredSection === "memory"
+                        visible: (root.hoveredSection || root.defaultPopoutSection) === "memory"
                         width: parent.width
                         spacing: Theme.spacingS
 
@@ -1196,7 +1653,7 @@ PluginComponent {
 
                     // ── Disk view ────────────────────────────────────────────
                     Column {
-                        visible: root.hoveredSection === "disk"
+                        visible: (root.hoveredSection || root.defaultPopoutSection) === "disk"
                         width: parent.width
                         spacing: Theme.spacingS
 
@@ -1280,6 +1737,154 @@ PluginComponent {
 
                             }
 
+                        }
+
+                    }
+
+                    // ── Network view ──────────────────────────────────────────
+                    Column {
+                        visible: (root.hoveredSection || root.defaultPopoutSection) === "network"
+                        width: parent.width
+                        spacing: Theme.spacingS
+                        Rectangle {
+                            width: parent.width
+                            height: 196
+                            radius: Theme.cornerRadius
+                            color: Theme.surfaceContainerHigh
+                            border.width: 1
+                            border.color: Theme.outline
+
+                            Item {
+                                anchors.fill: parent
+                                anchors.margins: Theme.spacingM
+
+                                Column {
+                                    id: networkSummaryRow
+
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    spacing: Math.max(2, Math.floor(Theme.spacingS / 2))
+
+                                    Row {
+                                        width: parent.width
+                                        spacing: Theme.spacingL
+
+                                        StyledText {
+                                            text: "↓ " + root.formatNetworkSpeed(root.currentDownloadRate)
+                                            color: Theme.info
+                                            font.pixelSize: Theme.fontSizeSmall
+                                            font.weight: Font.Bold
+                                        }
+
+                                        StyledText {
+                                            text: "↑ " + root.formatNetworkSpeed(root.currentUploadRate)
+                                            color: Theme.error
+                                            font.pixelSize: Theme.fontSizeSmall
+                                            font.weight: Font.Bold
+                                        }
+                                    }
+
+                                    StyledText {
+                                        width: parent.width
+                                        text: root.activeNetworkIp.length > 0 ? "IP " + root.activeNetworkIp : "IP unavailable"
+                                        color: Theme.surfaceVariantText
+                                        font.pixelSize: Theme.fontSizeSmall - 1
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                Item {
+                                    id: chartArea
+
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: networkSummaryRow.bottom
+                                    anchors.topMargin: Theme.spacingM
+                                    anchors.bottom: parent.bottom
+
+                                    Item {
+                                        id: leftAxis
+
+                                        width: 56
+                                        anchors.left: parent.left
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+
+                                        StyledText {
+                                            anchors.left: parent.left
+                                            anchors.top: parent.top
+                                            width: parent.width
+                                            text: root.formatCompactNetworkSpeed(root.peakDownloadRate)
+                                            color: Theme.info
+                                            font.pixelSize: Theme.fontSizeSmall - 1
+                                        }
+
+                                        StyledText {
+                                            anchors.left: parent.left
+                                            anchors.bottom: parent.bottom
+                                            width: parent.width
+                                            text: "0B/s"
+                                            color: Theme.surfaceVariantText
+                                            font.pixelSize: Theme.fontSizeSmall - 1
+                                        }
+                                    }
+
+                                    Item {
+                                        id: rightAxis
+
+                                        width: 56
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+
+                                        StyledText {
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            width: parent.width
+                                            horizontalAlignment: Text.AlignRight
+                                            text: root.formatCompactNetworkSpeed(root.peakUploadRate)
+                                            color: Theme.error
+                                            font.pixelSize: Theme.fontSizeSmall - 1
+                                        }
+
+                                        StyledText {
+                                            anchors.right: parent.right
+                                            anchors.bottom: parent.bottom
+                                            width: parent.width
+                                            horizontalAlignment: Text.AlignRight
+                                            text: "0B/s"
+                                            color: Theme.surfaceVariantText
+                                            font.pixelSize: Theme.fontSizeSmall - 1
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        anchors.left: leftAxis.right
+                                        anchors.right: rightAxis.left
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+                                        anchors.leftMargin: Theme.spacingS
+                                        anchors.rightMargin: Theme.spacingS
+                                        radius: Theme.cornerRadius
+                                        color: Theme.surface
+                                        border.width: 1
+                                        border.color: Theme.outline
+                                        clip: true
+
+                                        NetworkHistoryChart {
+                                            anchors.fill: parent
+                                            anchors.margins: Math.max(2, Math.floor(Theme.spacingS / 2))
+                                            downloadSeries: root.networkDownloadHistory
+                                            uploadSeries: root.networkUploadHistory
+                                            downloadPeak: root.peakDownloadRate
+                                            uploadPeak: root.peakUploadRate
+                                            strokeWidth: Math.max(2, root.networkLineWidth)
+                                            gridVisible: root.showNetworkGrid
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                     }
