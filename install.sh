@@ -52,6 +52,8 @@ mkdir -p -- "$TARGET_DIR"
 
 tar --exclude=.git -cf - -C "$SCRIPT_DIR" . | tar -xf - -C "$TARGET_DIR"
 
+dms restart
+
 cat <<EOF
 Installed ${PLUGIN_ID} to:
   ${TARGET_DIR}

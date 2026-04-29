@@ -9,6 +9,20 @@ PluginSettings {
 
     pluginId: "cpuCoreVisualizer"
 
+    function normalizedColorMode(candidate) {
+        const value = String(candidate || "vivid");
+        if (value === "soft" || value === "mono" || value === "base")
+            return "soft";
+        return "vivid";
+    }
+
+    Component.onCompleted: {
+        const stored = root.loadValue("colorMode", "vivid");
+        const normalized = root.normalizedColorMode(stored);
+        if (stored !== normalized)
+            root.saveValue("colorMode", normalized);
+    }
+
     readonly property var audioOutputOptions: {
         const options = [{
             label: "Auto cycle all outputs",
@@ -216,19 +230,13 @@ PluginSettings {
     SelectionSetting {
         settingKey: "colorMode"
         label: "Colour Mode"
-        description: "Choose a vivid palette, a softer dark-theme palette, theme text mono, or the UI base colour"
+        description: "Choose the palette for data fills. Text, icons, and widget chrome follow the DankBar theme."
         options: [{
             "label": "Vivid",
             "value": "vivid"
         }, {
-            "label": "Soft Dark",
+            "label": "Soft",
             "value": "soft"
-        }, {
-            "label": "Mono",
-            "value": "mono"
-        }, {
-            "label": "UI Base",
-            "value": "base"
         }]
         defaultValue: "vivid"
     }
@@ -246,29 +254,29 @@ PluginSettings {
     ToggleSetting {
         settingKey: "audioQuickSwitchEnabled"
         label: "Show Audio Output Button"
-        description: "Show a clickable output button in the bar that switches sinks and reflects the current device type."
+        description: "Show a clickable output button in the bar that opens the audio panel and reflects the current device type."
         defaultValue: false
     }
 
     ToggleSetting {
         settingKey: "popoutOpenOnClick"
         label: "Open Popouts On Click"
-        description: "Use click instead of hover for section popouts. The audio button still switches outputs on left-click and opens its panel on right-click."
+        description: "Use click instead of hover for section popouts. The audio button always opens its panel on left-click."
         defaultValue: false
     }
 
     SelectionSetting {
         settingKey: "audioQuickSwitchPrimary"
-        label: "Quick Toggle Output 1"
-        description: "First preferred output. Leave on auto-cycle to rotate through all currently available outputs."
+        label: "Preferred Output 1"
+        description: "First preferred output shown in the audio panel. Leave on auto-cycle to show all currently available outputs."
         options: root.audioOutputOptions
         defaultValue: ""
     }
 
     SelectionSetting {
         settingKey: "audioQuickSwitchSecondary"
-        label: "Quick Toggle Output 2"
-        description: "Optional second preferred output. When both outputs are set, the widget flips between just these two."
+        label: "Preferred Output 2"
+        description: "Optional second preferred output shown in the audio panel. When both outputs are set, the panel only shows those two."
         options: root.audioOutputOptions
         defaultValue: ""
     }

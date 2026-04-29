@@ -7,12 +7,12 @@ Per-core CPU bars plus memory, disk, and network throughput history for DankBar 
 - one bar per CPU core, plus dedicated memory and disk sections
 - a rolling one-minute network chart with separate download and upload scales
 - slot-based section visibility and ordering for CPU, memory, disk, and network
-- vivid, soft-dark, mono, or UI-base rendering
+- vivid or soft data-fill palettes while text and chrome follow the DankBar theme
 - compact icons to distinguish CPU, memory, and disk sections
 - selectable disk partitions for the disk usage section
 - configurable network chart width, height, line thickness, and grid
 - optional usage percentages plus adjustable probe time and smoother motion
-- optional audio-output button with current-device icon and two-device flip mode
+- optional audio-output button with current-device icon and preferred-device selector row
 
 ## Install
 
@@ -47,5 +47,6 @@ To install somewhere else, use:
 
 - enable **Show Audio Output Button** in the plugin settings to add a clickable sink button to the bar
 - the button icon reflects the active output type: monitor for HDMI/display sinks, headset for headphones, otherwise speaker
-- leave both output selectors on **Auto cycle all outputs** to rotate through every available sink
-- set **Quick Toggle Output 1** and **Quick Toggle Output 2** to flip between just those two devices
+- left-click the button to open the audio panel, then choose an output from the source icons at the top
+- leave both output selectors on **Auto cycle all outputs** to show every available sink in that selector row
+- set **Preferred Output 1** and **Preferred Output 2** to limit the selector row to just those preferred devices

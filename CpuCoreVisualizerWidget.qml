@@ -45,7 +45,9 @@ PluginComponent {
     property int diskSectionOrder: Math.max(1, Math.min(4, Math.round(numberSetting("diskSectionOrder", 3))))
     property int networkSectionOrder: Math.max(1, Math.min(4, Math.round(numberSetting("networkSectionOrder", 4))))
     property real smoothingFactor: Math.max(0.08, Math.min(0.85, numberSetting("smoothingPercent", 28) / 100))
-    property string colorMode: stringSetting("colorMode", "vivid")
+    property string rawColorMode: stringSetting("colorMode", "vivid")
+    property string colorMode: (root.rawColorMode === "soft" || root.rawColorMode === "mono" || root.rawColorMode === "base") ? "soft" : "vivid"
+    property real fillOverlayOpacity: root.colorMode === "soft" ? 0.22 : 0.24
     property bool showOverallPercentage: boolSetting("showOverallPercentage", true)
     property bool audioQuickSwitchEnabled: boolSetting("audioQuickSwitchEnabled", false)
     property string audioQuickSwitchPrimary: stringSetting("audioQuickSwitchPrimary", "")
@@ -53,6 +55,7 @@ PluginComponent {
     property bool barHovered: false
     property bool popoutHovered: false
     property bool detailsPopoutOpen: false
+    property string pendingDeferredPopoutSection: ""
     property string hoveredSection: ""
     property var animatedCpuUsage: []
     property real animatedMemoryUsage: 0
@@ -390,14 +393,8 @@ PluginComponent {
     }
 
     function colorFor(index) {
-        if (root.colorMode === "mono")
-            return Theme.widgetTextColor;
-
         if (root.colorMode === "soft")
             return root.softPalette[index % root.softPalette.length];
-
-        if (root.colorMode === "base")
-            return Theme.primary;
 
         return root.vividPalette[index % root.vividPalette.length];
     }
@@ -523,12 +520,6 @@ PluginComponent {
         if (sectionKey === "cpu")
             return root.colorFor(index);
 
-        if (root.colorMode === "mono")
-            return Theme.widgetTextColor;
-
-        if (root.colorMode === "base")
-            return Theme.primary;
-
         if (sectionKey === "memory")
             return root.colorMode === "soft" ? root.softPalette[11] : root.vividPalette[13];
 
@@ -539,6 +530,14 @@ PluginComponent {
             return index === 0 ? Theme.info : Theme.error;
 
         return root.colorMode === "soft" ? root.softPalette[index % root.softPalette.length] : root.vividPalette[index % root.vividPalette.length];
+    }
+
+    function networkDownloadColor() {
+        return root.colorMode === "soft" ? root.softPalette[11] : root.vividPalette[13];
+    }
+
+    function networkUploadColor() {
+        return root.colorMode === "soft" ? root.softPalette[0] : root.vividPalette[0];
     }
 
     function formatStorage(bytes) {
@@ -743,8 +742,7 @@ PluginComponent {
         return sinks;
     }
 
-    function audioButtonIcon() {
-        const sink = AudioService.sink;
+    function audioSinkIconName(sink) {
         if (!sink)
             return "speaker";
 
@@ -756,25 +754,28 @@ PluginComponent {
         return "speaker";
     }
 
-    function toggleAudioOutput() {
-        if (!root.audioQuickSwitchEnabled)
+    function audioSinkLabel(sink) {
+        if (!sink)
+            return "No audio output";
+
+        return AudioService.displayName(sink) || sink.description || sink.name || "Audio output";
+    }
+
+    function isAudioSinkActive(sink) {
+        const activeName = AudioService.sink && AudioService.sink.name ? AudioService.sink.name : "";
+        return Boolean(sink && sink.name && activeName.length > 0 && sink.name === activeName);
+    }
+
+    function selectAudioOutput(sink) {
+        if (!sink)
             return false;
 
-        const sinks = root.availableAudioToggleSinks();
-        if (!Array.isArray(sinks) || sinks.length < 2)
-            return false;
-
-        const currentName = AudioService.sink && AudioService.sink.name ? AudioService.sink.name : "";
-        let nextSink = sinks[0];
-
-        if (currentName.length > 0) {
-            const currentIndex = sinks.findIndex(node => node.name === currentName);
-            if (currentIndex !== -1)
-                nextSink = sinks[(currentIndex + 1) % sinks.length];
-        }
-
-        Pipewire.preferredDefaultAudioSink = nextSink;
+        Pipewire.preferredDefaultAudioSink = sink;
         return true;
+    }
+
+    function audioButtonIcon() {
+        return root.audioSinkIconName(AudioService.sink);
     }
 
     function barPositionValue() {
@@ -814,16 +815,26 @@ PluginComponent {
 
         const globalPos = anchor.mapToItem(null, 0, 0);
         const barPosition = root.barPositionValue();
-        const triggerY = (barPosition === SettingsData.Position.Left || barPosition === SettingsData.Position.Right) ? (globalPos.y + anchor.height / 2) : globalPos.y;
+        let triggerY = globalPos.y;
+        if (barPosition === SettingsData.Position.Left || barPosition === SettingsData.Position.Right)
+            triggerY = globalPos.y + anchor.height / 2;
+        else if (barPosition === SettingsData.Position.Top)
+            triggerY = globalPos.y + anchor.height;
         sectionPopout.setTriggerPosition(globalPos.x, triggerY, anchor.width, root.section, root.parentScreen, barPosition, root.barThickness, root.barSpacing, root.barConfig);
         return true;
     }
 
     function openSectionPopout(sectionKey) {
+        closePopoutTimer.stop();
         root.activePopoutSection = sectionKey;
         if (!root.positionSectionPopout(sectionKey))
             return;
         sectionPopout.open();
+    }
+
+    function deferSectionPopout(sectionKey) {
+        root.pendingDeferredPopoutSection = sectionKey;
+        deferredPopoutOpenTimer.restart();
     }
 
     function toggleSectionPopout(sectionKey) {
@@ -894,14 +905,8 @@ PluginComponent {
                     root.clearHoveredSection("audio");
             }
             onPressed: mouse => horizontalAudioRipple.trigger(mouse.x, mouse.y)
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) {
-                    root.toggleSectionPopout("audio");
-                    return;
-                }
-                root.toggleAudioOutput();
-            }
+            acceptedButtons: Qt.LeftButton
+            onClicked: root.deferSectionPopout("audio")
         }
     }
 
@@ -941,14 +946,8 @@ PluginComponent {
                     root.clearHoveredSection("audio");
             }
             onPressed: mouse => verticalAudioRipple.trigger(mouse.x, mouse.y)
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) {
-                    root.toggleSectionPopout("audio");
-                    return;
-                }
-                root.toggleAudioOutput();
-            }
+            acceptedButtons: Qt.LeftButton
+            onClicked: root.deferSectionPopout("audio")
         }
     }
 
@@ -963,6 +962,8 @@ PluginComponent {
     }
 
     function scheduleClosePopout() {
+        if (root.popoutTriggerMode === "click")
+            return;
         if (root.barHovered || root.popoutHovered)
             return ;
 
@@ -1003,6 +1004,14 @@ PluginComponent {
         font.pixelSize: root.overallTextSize()
         font.weight: Font.Medium
         text: "↓ 888.8M"
+    }
+
+    TextMetrics {
+        id: compactArrowMetrics
+
+        font.pixelSize: root.overallTextSize()
+        font.weight: Font.Medium
+        text: "↓"
     }
 
     component NetworkHistoryChart: Canvas {
@@ -1108,14 +1117,36 @@ PluginComponent {
             anchors.centerIn: parent
             spacing: root.barGap
 
-            StyledText {
+            Item {
                 width: Math.ceil(networkLabelMetrics.advanceWidth)
+                height: downloadSpeedText.implicitHeight
                 anchors.verticalCenter: parent.verticalCenter
-                horizontalAlignment: Text.AlignRight
-                text: "↓ " + root.formatCompactNetworkSpeed(root.currentDownloadRate)
-                color: Theme.info
-                font.pixelSize: root.overallTextSize()
-                font.weight: Font.Medium
+
+                StyledText {
+                    id: downloadSpeedText
+
+                    anchors.left: parent.left
+                    anchors.right: downloadArrowText.left
+                    anchors.rightMargin: 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    horizontalAlignment: Text.AlignRight
+                    text: root.formatCompactNetworkSpeed(root.currentDownloadRate)
+                    color: Theme.widgetTextColor
+                    font.pixelSize: root.overallTextSize()
+                    font.weight: Font.Medium
+                }
+
+                StyledText {
+                    id: downloadArrowText
+
+                    width: Math.ceil(compactArrowMetrics.advanceWidth)
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "↓"
+                    color: Theme.info
+                    font.pixelSize: root.overallTextSize()
+                    font.weight: Font.Medium
+                }
             }
 
             Rectangle {
@@ -1133,18 +1164,42 @@ PluginComponent {
                     uploadSeries: root.networkUploadHistory
                     downloadPeak: root.peakDownloadRate
                     uploadPeak: root.peakUploadRate
+                    downloadColor: root.networkDownloadColor()
+                    uploadColor: root.networkUploadColor()
                     strokeWidth: root.networkLineWidth
                     gridVisible: root.showNetworkGrid
                 }
             }
 
-            StyledText {
+            Item {
                 width: Math.ceil(networkLabelMetrics.advanceWidth)
+                height: uploadSpeedText.implicitHeight
                 anchors.verticalCenter: parent.verticalCenter
-                text: "↑ " + root.formatCompactNetworkSpeed(root.currentUploadRate)
-                color: Theme.error
-                font.pixelSize: root.overallTextSize()
-                font.weight: Font.Medium
+
+                StyledText {
+                    id: uploadArrowText
+
+                    width: Math.ceil(compactArrowMetrics.advanceWidth)
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "↑"
+                    color: Theme.error
+                    font.pixelSize: root.overallTextSize()
+                    font.weight: Font.Medium
+                }
+
+                StyledText {
+                    id: uploadSpeedText
+
+                    anchors.left: uploadArrowText.right
+                    anchors.leftMargin: 2
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.formatCompactNetworkSpeed(root.currentUploadRate)
+                    color: Theme.widgetTextColor
+                    font.pixelSize: root.overallTextSize()
+                    font.weight: Font.Medium
+                }
             }
         }
     }
@@ -1186,13 +1241,34 @@ PluginComponent {
             anchors.centerIn: parent
             spacing: root.barGap
 
-            StyledText {
+            Item {
                 width: verticalNetwork.availableWidth
-                horizontalAlignment: Text.AlignHCenter
-                text: "↓ " + root.formatCompactNetworkSpeed(root.currentDownloadRate)
-                color: Theme.info
-                font.pixelSize: Math.max(8, root.overallTextSize() - 1)
-                font.weight: Font.Medium
+                height: verticalDownloadSpeedText.implicitHeight
+
+                StyledText {
+                    id: verticalDownloadSpeedText
+
+                    anchors.left: parent.left
+                    anchors.right: verticalDownloadArrowText.left
+                    anchors.rightMargin: 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    horizontalAlignment: Text.AlignRight
+                    text: root.formatCompactNetworkSpeed(root.currentDownloadRate)
+                    color: Theme.widgetTextColor
+                    font.pixelSize: Math.max(8, root.overallTextSize() - 1)
+                    font.weight: Font.Medium
+                }
+
+                StyledText {
+                    id: verticalDownloadArrowText
+
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "↓"
+                    color: Theme.info
+                    font.pixelSize: Math.max(8, root.overallTextSize() - 1)
+                    font.weight: Font.Medium
+                }
             }
 
             Rectangle {
@@ -1209,18 +1285,40 @@ PluginComponent {
                     uploadSeries: root.networkUploadHistory
                     downloadPeak: root.peakDownloadRate
                     uploadPeak: root.peakUploadRate
+                    downloadColor: root.networkDownloadColor()
+                    uploadColor: root.networkUploadColor()
                     strokeWidth: root.networkLineWidth
                     gridVisible: root.showNetworkGrid
                 }
             }
 
-            StyledText {
+            Item {
                 width: verticalNetwork.availableWidth
-                horizontalAlignment: Text.AlignHCenter
-                text: "↑ " + root.formatCompactNetworkSpeed(root.currentUploadRate)
-                color: Theme.error
-                font.pixelSize: Math.max(8, root.overallTextSize() - 1)
-                font.weight: Font.Medium
+                height: verticalUploadSpeedText.implicitHeight
+
+                StyledText {
+                    id: verticalUploadArrowText
+
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "↑"
+                    color: Theme.error
+                    font.pixelSize: Math.max(8, root.overallTextSize() - 1)
+                    font.weight: Font.Medium
+                }
+
+                StyledText {
+                    id: verticalUploadSpeedText
+
+                    anchors.left: verticalUploadArrowText.right
+                    anchors.leftMargin: 2
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.formatCompactNetworkSpeed(root.currentUploadRate)
+                    color: Theme.widgetTextColor
+                    font.pixelSize: Math.max(8, root.overallTextSize() - 1)
+                    font.weight: Font.Medium
+                }
             }
         }
     }
@@ -1228,7 +1326,7 @@ PluginComponent {
     component HorizontalMetricSection: Rectangle {
         id: horizontalSection
 
-        property string sectionKey: "cpu"
+        property string sectionKey: ""
         property string registeredSectionKey: ""
 
         implicitWidth: metricContent.implicitWidth + root.sectionShellPadding * 2
@@ -1311,7 +1409,7 @@ PluginComponent {
                 DankIcon {
                     name: root.sectionIcon(horizontalSection.sectionKey)
                     size: root.compactIconSize
-                    color: root.sectionColorFor(horizontalSection.sectionKey, 0)
+                    color: Theme.widgetTextColor
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
@@ -1338,7 +1436,7 @@ PluginComponent {
     component VerticalMetricSection: Rectangle {
         id: verticalSection
 
-        property string sectionKey: "cpu"
+        property string sectionKey: ""
         property int availableWidth: root.sectionPillThickness
         property bool fillFromLeft: root.axis?.edge === "left"
         property string registeredSectionKey: ""
@@ -1425,7 +1523,7 @@ PluginComponent {
                 DankIcon {
                     name: root.sectionIcon(verticalSection.sectionKey)
                     size: Math.min(root.compactIconSize, verticalSection.availableWidth)
-                    color: root.sectionColorFor(verticalSection.sectionKey, 0)
+                    color: Theme.widgetTextColor
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
@@ -1528,6 +1626,19 @@ PluginComponent {
     }
 
     Timer {
+        id: deferredPopoutOpenTimer
+
+        interval: 1
+        repeat: false
+        onTriggered: {
+            const sectionKey = root.pendingDeferredPopoutSection;
+            root.pendingDeferredPopoutSection = "";
+            if (sectionKey.length > 0)
+                root.openSectionPopout(sectionKey);
+        }
+    }
+
+    Timer {
         id: probeTimer
 
         interval: root.probeInterval
@@ -1565,6 +1676,13 @@ PluginComponent {
 
             implicitWidth: root.padding * 2 + horizontalContent.implicitWidth
             implicitHeight: root.widgetThickness
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                onClicked: {
+                }
+            }
 
             Row {
                 id: horizontalContent
@@ -1620,6 +1738,13 @@ PluginComponent {
 
             implicitWidth: root.widgetThickness
             implicitHeight: root.padding * 2 + verticalContent.implicitHeight + root.sectionOuterMargin * 2
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                onClicked: {
+                }
+            }
 
             Column {
                 id: verticalContent
@@ -1754,6 +1879,67 @@ PluginComponent {
                         width: parent.width
                         spacing: Theme.spacingM
 
+                        Flow {
+                            id: audioSourceFlow
+
+                            visible: root.availableAudioToggleSinks().length > 1
+                            width: parent.width
+                            spacing: Theme.spacingS
+
+                            Repeater {
+                                model: root.availableAudioToggleSinks()
+
+                                delegate: Rectangle {
+                                    required property var modelData
+
+                                    width: Math.max(110, Math.min(180, (audioSourceFlow.width - audioSourceFlow.spacing) / 2))
+                                    height: 52
+                                    radius: Theme.cornerRadius
+                                    color: root.isAudioSinkActive(modelData) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+                                    border.width: 1
+                                    border.color: root.isAudioSinkActive(modelData) ? Theme.primary : Theme.outline
+
+                                    DankRipple {
+                                        id: audioSourceRipple
+                                        cornerRadius: parent.radius
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onPressed: mouse => audioSourceRipple.trigger(mouse.x, mouse.y)
+                                        onClicked: root.selectAudioOutput(parent.modelData)
+                                    }
+
+                                    Row {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: Theme.spacingM
+                                        anchors.rightMargin: Theme.spacingM
+                                        spacing: Theme.spacingS
+
+                                        DankIcon {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            name: root.audioSinkIconName(modelData)
+                                            size: Theme.iconSize
+                                            color: root.isAudioSinkActive(modelData) ? Theme.primary : Theme.surfaceText
+                                            filled: true
+                                        }
+
+                                        StyledText {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width - Theme.iconSize - Theme.spacingS
+                                            text: root.audioSinkLabel(modelData)
+                                            color: Theme.surfaceText
+                                            font.pixelSize: Theme.fontSizeSmall
+                                            font.weight: root.isAudioSinkActive(modelData) ? Font.Medium : Font.Normal
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         Rectangle {
                             width: parent.width
                             height: 72
@@ -1781,7 +1967,7 @@ PluginComponent {
 
                                     StyledText {
                                         width: parent.width
-                                        text: AudioService.sink ? AudioService.displayName(AudioService.sink) : "No audio output"
+                                        text: root.audioSinkLabel(AudioService.sink)
                                         color: Theme.surfaceText
                                         font.pixelSize: Theme.fontSizeMedium
                                         font.weight: Font.Medium
@@ -1790,7 +1976,14 @@ PluginComponent {
 
                                     StyledText {
                                         width: parent.width
-                                        text: AudioService.sink ? "Left-click the bar button to switch outputs. Right-click to pin this panel." : ""
+                                        text: {
+                                            const sinkCount = root.availableAudioToggleSinks().length;
+                                            if (!AudioService.sink)
+                                                return "";
+                                            if (sinkCount > 1)
+                                                return "Click an output above to switch devices.";
+                                            return "Only one output is currently available.";
+                                        }
                                         color: Theme.surfaceVariantText
                                         font.pixelSize: Theme.fontSizeSmall
                                         wrapMode: Text.WordWrap
@@ -1908,7 +2101,7 @@ PluginComponent {
                                         height: parent.height
                                         radius: Theme.cornerRadius
                                         color: root.colorFor(index)
-                                        opacity: (root.colorMode === "mono" || root.colorMode === "base") ? 0.18 : 0.24
+                                        opacity: root.fillOverlayOpacity
 
                                         Behavior on width {
                                             NumberAnimation {
@@ -1923,7 +2116,7 @@ PluginComponent {
                                         width: 8
                                         height: 8
                                         radius: 4
-                                        color: root.colorFor(index)
+                                        color: Theme.widgetTextColor
                                         anchors.left: parent.left
                                         anchors.leftMargin: Theme.spacingM
                                         anchors.top: parent.top
@@ -1990,7 +2183,7 @@ PluginComponent {
                                 height: parent.height
                                 radius: parent.radius
                                 color: root.sectionColorFor("memory", 0)
-                                opacity: (root.colorMode === "mono" || root.colorMode === "base") ? 0.18 : 0.24
+                                opacity: root.fillOverlayOpacity
 
                                 Behavior on width {
                                     NumberAnimation {
@@ -2008,7 +2201,7 @@ PluginComponent {
                                 anchors.topMargin: Theme.spacingM
                                 name: "sd_card"
                                 size: Theme.iconSize
-                                color: root.sectionColorFor("memory", 0)
+                                color: Theme.widgetTextColor
                             }
 
                             StyledText {
@@ -2078,7 +2271,7 @@ PluginComponent {
                                     height: parent.height
                                     radius: Theme.cornerRadius
                                     color: root.sectionColorFor("memory", 0)
-                                    opacity: (root.colorMode === "mono" || root.colorMode === "base") ? 0.18 : 0.24
+                                    opacity: root.fillOverlayOpacity
 
                                     Behavior on width {
                                         NumberAnimation {
@@ -2093,7 +2286,7 @@ PluginComponent {
                                     width: 8
                                     height: 8
                                     radius: 4
-                                    color: root.sectionColorFor("memory", 0)
+                                    color: Theme.widgetTextColor
                                     anchors.left: parent.left
                                     anchors.leftMargin: Theme.spacingM
                                     anchors.top: parent.top
@@ -2168,7 +2361,7 @@ PluginComponent {
                                     height: parent.height
                                     radius: Theme.cornerRadius
                                     color: root.sectionColorFor("disk", index)
-                                    opacity: (root.colorMode === "mono" || root.colorMode === "base") ? 0.18 : 0.24
+                                    opacity: root.fillOverlayOpacity
 
                                     Behavior on width {
                                         NumberAnimation {
@@ -2183,7 +2376,7 @@ PluginComponent {
                                     width: 8
                                     height: 8
                                     radius: 4
-                                    color: root.sectionColorFor("disk", index)
+                                    color: Theme.widgetTextColor
                                     anchors.left: parent.left
                                     anchors.leftMargin: Theme.spacingM
                                     anchors.top: parent.top
@@ -2258,31 +2451,45 @@ PluginComponent {
                                     anchors.top: parent.top
                                     spacing: Math.max(2, Math.floor(Theme.spacingS / 2))
 
-                                    Row {
+                                    Item {
                                         width: parent.width
-                                        spacing: Theme.spacingL
+                                        height: Math.max(networkSpeedRow.implicitHeight, networkIpText.implicitHeight)
 
-                                        StyledText {
-                                            text: "↓ " + root.formatNetworkSpeed(root.currentDownloadRate)
-                                            color: Theme.info
-                                            font.pixelSize: Theme.fontSizeSmall
-                                            font.weight: Font.Bold
+                                        Row {
+                                            id: networkSpeedRow
+
+                                            anchors.left: parent.left
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: Theme.spacingL
+
+                                            StyledText {
+                                                text: "↓ " + root.formatNetworkSpeed(root.currentDownloadRate)
+                                                color: Theme.info
+                                                font.pixelSize: Theme.fontSizeSmall
+                                                font.weight: Font.Bold
+                                            }
+
+                                            StyledText {
+                                                text: "↑ " + root.formatNetworkSpeed(root.currentUploadRate)
+                                                color: Theme.error
+                                                font.pixelSize: Theme.fontSizeSmall
+                                                font.weight: Font.Bold
+                                            }
                                         }
 
                                         StyledText {
-                                            text: "↑ " + root.formatNetworkSpeed(root.currentUploadRate)
-                                            color: Theme.error
-                                            font.pixelSize: Theme.fontSizeSmall
-                                            font.weight: Font.Bold
-                                        }
-                                    }
+                                            id: networkIpText
 
-                                    StyledText {
-                                        width: parent.width
-                                        text: root.activeNetworkIp.length > 0 ? "IP " + root.activeNetworkIp : "IP unavailable"
-                                        color: Theme.surfaceVariantText
-                                        font.pixelSize: Theme.fontSizeSmall - 1
-                                        elide: Text.ElideRight
+                                            anchors.left: networkSpeedRow.right
+                                            anchors.leftMargin: Theme.spacingM
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            horizontalAlignment: Text.AlignRight
+                                            text: root.activeNetworkIp.length > 0 ? "IP " + root.activeNetworkIp : "IP unavailable"
+                                            color: Theme.surfaceVariantText
+                                            font.pixelSize: Theme.fontSizeSmall - 1
+                                            elide: Text.ElideRight
+                                        }
                                     }
                                 }
 
@@ -2308,7 +2515,7 @@ PluginComponent {
                                             anchors.top: parent.top
                                             width: parent.width
                                             text: root.formatCompactNetworkSpeed(root.peakDownloadRate)
-                                            color: Theme.info
+                                            color: root.networkDownloadColor()
                                             font.pixelSize: Theme.fontSizeSmall - 1
                                         }
 
@@ -2336,7 +2543,7 @@ PluginComponent {
                                             width: parent.width
                                             horizontalAlignment: Text.AlignRight
                                             text: root.formatCompactNetworkSpeed(root.peakUploadRate)
-                                            color: Theme.error
+                                            color: root.networkUploadColor()
                                             font.pixelSize: Theme.fontSizeSmall - 1
                                         }
 
@@ -2371,6 +2578,8 @@ PluginComponent {
                                             uploadSeries: root.networkUploadHistory
                                             downloadPeak: root.peakDownloadRate
                                             uploadPeak: root.peakUploadRate
+                                            downloadColor: root.networkDownloadColor()
+                                            uploadColor: root.networkUploadColor()
                                             strokeWidth: Math.max(2, root.networkLineWidth)
                                             gridVisible: root.showNetworkGrid
                                         }
