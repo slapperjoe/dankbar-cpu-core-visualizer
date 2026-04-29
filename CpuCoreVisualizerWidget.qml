@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Services.Pipewire
 import qs.Common
 import qs.Modules.Plugins
 import qs.Services
@@ -8,6 +9,9 @@ PluginComponent {
     id: root
 
     property int padding: 4
+    property bool patchingBarConfig: false
+    property var sectionAnchors: ({})
+    property string activePopoutSection: ""
     property var vividPalette: ["#ff003c", "#ff4f00", "#ff7a00", "#ffb000", "#ffd400", "#f5ff00", "#c8ff00", "#8dff00", "#53ff00", "#00ff1e", "#00ff6a", "#00ffae", "#00ffd5", "#00e5ff", "#00b3ff", "#0080ff", "#0057ff", "#3040ff", "#5c2dff", "#7d1fff", "#9d00ff", "#c200ff", "#e100ff", "#ff00e1", "#ff00b8", "#ff008f", "#ff0066", "#ff335f", "#ff5c5c", "#ff7f50", "#ff9f1c", "#ffcf33"]
     property var softPalette: ["#ff8aa5", "#ffac7a", "#ffc27a", "#ffd86e", "#fff07a", "#dcff8a", "#b8ff94", "#8eff9d", "#7fffb8", "#7fffd8", "#80f3ff", "#82dcff", "#86c3ff", "#90acff", "#a595ff", "#bc8cff", "#d38bff", "#ea8cff", "#ff8fe8", "#ff93cf", "#ff95b5", "#ff9c9c", "#ffb091", "#ffc188", "#ffd487", "#f1e88f", "#d7f39a", "#bbeea8", "#a6e8bf", "#9be1d4", "#a2d8e6", "#b4cfee"]
     property int barWidth: Math.max(2, Math.round(numberSetting("barWidth", 4)))
@@ -21,7 +25,16 @@ PluginComponent {
     property int networkChartWidth: Math.max(64, Math.round(numberSetting("networkChartWidth", 120)))
     property int networkChartHeight: Math.max(12, Math.round(numberSetting("networkChartHeight", 24)))
     property real networkLineWidth: Math.max(1, Math.min(4, numberSetting("networkLineWidth", 2)))
+    property real sharedWidgetPadding: (root.barConfig?.removeWidgetPadding ?? false) ? 0 : ((root.barConfig?.widgetPadding ?? 12) * (root.widgetThickness / 30))
+    property int sectionShellPadding: Math.max(4, root.barGap + 3)
+    property int networkShellPadding: Math.max(2, root.sectionShellPadding - 2)
+    property int sectionOuterMargin: Math.max(2, Math.round(root.sharedWidgetPadding / 4))
+    property int sectionPillThickness: Math.max(root.minBarHeight + 12, Math.round(root.widgetThickness - root.sectionOuterMargin))
+    property int sectionContentThickness: Math.max(root.minBarHeight + 1, root.sectionPillThickness - root.sectionShellPadding * 2)
+    property int audioButtonSize: Math.max(root.compactIconSize + 12, root.sectionPillThickness + 2)
+    property real sectionPillRadius: Math.min(root.sectionPillThickness / 2, Theme.cornerRadius + root.sectionOuterMargin)
     property bool showNetworkGrid: boolSetting("showNetworkGrid", true)
+    property string popoutTriggerMode: boolSetting("popoutOpenOnClick", stringSetting("popoutTriggerMode", "hover") === "click") ? "click" : "hover"
     property var configuredSectionSlots: root.arraySetting("sectionSlots", [])
     property bool showCpuSection: boolSetting("showCpuSection", true)
     property bool showMemorySection: boolSetting("showMemorySection", true)
@@ -34,6 +47,9 @@ PluginComponent {
     property real smoothingFactor: Math.max(0.08, Math.min(0.85, numberSetting("smoothingPercent", 28) / 100))
     property string colorMode: stringSetting("colorMode", "vivid")
     property bool showOverallPercentage: boolSetting("showOverallPercentage", true)
+    property bool audioQuickSwitchEnabled: boolSetting("audioQuickSwitchEnabled", false)
+    property string audioQuickSwitchPrimary: stringSetting("audioQuickSwitchPrimary", "")
+    property string audioQuickSwitchSecondary: stringSetting("audioQuickSwitchSecondary", "")
     property bool barHovered: false
     property bool popoutHovered: false
     property bool detailsPopoutOpen: false
@@ -205,6 +221,13 @@ PluginComponent {
         return enabled.map(section => section.key);
     }
     readonly property string defaultPopoutSection: root.enabledOrderedSectionKeys.length > 0 ? root.enabledOrderedSectionKeys[0] : ""
+    readonly property string currentPopoutSection: {
+        if (root.popoutTriggerMode === "hover" && root.hoveredSection.length > 0)
+            return root.hoveredSection;
+        if (root.activePopoutSection.length > 0)
+            return root.activePopoutSection;
+        return root.defaultPopoutSection;
+    }
     readonly property int sectionGap: root.sectionPadding
     readonly property int compactIconSize: Math.max(10, Math.min(root.widgetThickness - root.padding * 2, Theme.barIconSize(root.barThickness, -8, root.barConfig?.maximizeWidgetIcons, root.barConfig?.iconScale)))
     readonly property var rawCoreUsage: {
@@ -706,13 +729,237 @@ PluginComponent {
         return summary;
     }
 
+    function availableAudioToggleSinks() {
+        const sinks = AudioService.getAvailableSinks();
+        if (!Array.isArray(sinks))
+            return [];
+
+        const configuredNames = [root.audioQuickSwitchPrimary, root.audioQuickSwitchSecondary].filter(name => name && name.length > 0);
+        let targets = sinks.filter(node => configuredNames.indexOf(node.name) !== -1);
+
+        if (configuredNames.length >= 2 && targets.length >= 2)
+            return targets;
+
+        return sinks;
+    }
+
+    function audioButtonIcon() {
+        const sink = AudioService.sink;
+        if (!sink)
+            return "speaker";
+
+        const sinkIcon = String(AudioService.sinkIcon(sink) || "speaker");
+        if (sinkIcon === "tv")
+            return "monitor";
+        if (sinkIcon === "headset")
+            return "headset";
+        return "speaker";
+    }
+
+    function toggleAudioOutput() {
+        if (!root.audioQuickSwitchEnabled)
+            return false;
+
+        const sinks = root.availableAudioToggleSinks();
+        if (!Array.isArray(sinks) || sinks.length < 2)
+            return false;
+
+        const currentName = AudioService.sink && AudioService.sink.name ? AudioService.sink.name : "";
+        let nextSink = sinks[0];
+
+        if (currentName.length > 0) {
+            const currentIndex = sinks.findIndex(node => node.name === currentName);
+            if (currentIndex !== -1)
+                nextSink = sinks[(currentIndex + 1) % sinks.length];
+        }
+
+        Pipewire.preferredDefaultAudioSink = nextSink;
+        return true;
+    }
+
+    function barPositionValue() {
+        if (root.axis?.edge === "left")
+            return SettingsData.Position.Left;
+        if (root.axis?.edge === "right")
+            return SettingsData.Position.Right;
+        if (root.axis?.edge === "bottom")
+            return SettingsData.Position.Bottom;
+        return SettingsData.Position.Top;
+    }
+
+    function registerSectionAnchor(sectionKey, item) {
+        if (!sectionKey || !item)
+            return;
+        const next = Object.assign({}, root.sectionAnchors);
+        next[sectionKey] = item;
+        root.sectionAnchors = next;
+    }
+
+    function unregisterSectionAnchor(sectionKey, item) {
+        if (!sectionKey || !item || root.sectionAnchors[sectionKey] !== item)
+            return;
+        const next = Object.assign({}, root.sectionAnchors);
+        delete next[sectionKey];
+        root.sectionAnchors = next;
+    }
+
+    function sectionAnchor(sectionKey) {
+        return root.sectionAnchors[sectionKey] || null;
+    }
+
+    function positionSectionPopout(sectionKey) {
+        const anchor = root.sectionAnchor(sectionKey);
+        if (!anchor || !root.parentScreen)
+            return false;
+
+        const globalPos = anchor.mapToItem(null, 0, 0);
+        const barPosition = root.barPositionValue();
+        const triggerY = (barPosition === SettingsData.Position.Left || barPosition === SettingsData.Position.Right) ? (globalPos.y + anchor.height / 2) : globalPos.y;
+        sectionPopout.setTriggerPosition(globalPos.x, triggerY, anchor.width, root.section, root.parentScreen, barPosition, root.barThickness, root.barSpacing, root.barConfig);
+        return true;
+    }
+
+    function openSectionPopout(sectionKey) {
+        root.activePopoutSection = sectionKey;
+        if (!root.positionSectionPopout(sectionKey))
+            return;
+        sectionPopout.open();
+    }
+
+    function toggleSectionPopout(sectionKey) {
+        if (sectionPopout.shouldBeVisible && root.activePopoutSection === sectionKey) {
+            root.closeDetailsPopout();
+            return;
+        }
+        root.openSectionPopout(sectionKey);
+    }
+
+    function handleSectionHover(sectionKey) {
+        root.hoveredSection = sectionKey;
+        if (root.popoutTriggerMode === "hover")
+            root.openSectionPopout(sectionKey);
+    }
+
+    function clearHoveredSection(sectionKey) {
+        if (root.hoveredSection === sectionKey && !root.barHovered && !root.popoutHovered)
+            root.hoveredSection = "";
+    }
+
+    function ensureTransparentHostPill() {
+        if (!root.barConfig || root.patchingBarConfig || root.barConfig._cpuCoreVisualizerPatched)
+            return;
+
+        root.patchingBarConfig = true;
+        const nextConfig = Object.assign({}, root.barConfig);
+        nextConfig.noBackground = true;
+        nextConfig.removeWidgetPadding = true;
+        nextConfig._cpuCoreVisualizerPatched = true;
+        root.barConfig = nextConfig;
+        root.patchingBarConfig = false;
+    }
+
+    component HorizontalAudioToggleButton: Rectangle {
+        id: horizontalAudioButton
+
+        width: root.audioButtonSize
+        height: root.sectionPillThickness
+        radius: root.sectionPillRadius
+        color: audioButtonMouse.containsMouse ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+
+        Component.onCompleted: root.registerSectionAnchor("audio", horizontalAudioButton)
+        Component.onDestruction: root.unregisterSectionAnchor("audio", horizontalAudioButton)
+
+        DankRipple {
+            id: horizontalAudioRipple
+            cornerRadius: horizontalAudioButton.radius
+        }
+
+        DankIcon {
+            anchors.centerIn: parent
+            name: root.audioButtonIcon()
+            size: Math.min(root.sectionPillThickness - 6, root.compactIconSize + 2)
+            color: Theme.widgetTextColor
+            filled: true
+        }
+
+        MouseArea {
+            id: audioButtonMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onContainsMouseChanged: {
+                if (containsMouse)
+                    root.handleSectionHover("audio");
+                else
+                    root.clearHoveredSection("audio");
+            }
+            onPressed: mouse => horizontalAudioRipple.trigger(mouse.x, mouse.y)
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton) {
+                    root.toggleSectionPopout("audio");
+                    return;
+                }
+                root.toggleAudioOutput();
+            }
+        }
+    }
+
+    component VerticalAudioToggleButton: Rectangle {
+        id: verticalAudioButton
+
+        width: root.sectionPillThickness
+        height: width
+        radius: root.sectionPillRadius
+        color: audioButtonMouse.containsMouse ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+
+        Component.onCompleted: root.registerSectionAnchor("audio", verticalAudioButton)
+        Component.onDestruction: root.unregisterSectionAnchor("audio", verticalAudioButton)
+
+        DankRipple {
+            id: verticalAudioRipple
+            cornerRadius: verticalAudioButton.radius
+        }
+
+        DankIcon {
+            anchors.centerIn: parent
+            name: root.audioButtonIcon()
+            size: Math.min(parent.width - 6, root.compactIconSize + 2)
+            color: Theme.widgetTextColor
+            filled: true
+        }
+
+        MouseArea {
+            id: audioButtonMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onContainsMouseChanged: {
+                if (containsMouse)
+                    root.handleSectionHover("audio");
+                else
+                    root.clearHoveredSection("audio");
+            }
+            onPressed: mouse => verticalAudioRipple.trigger(mouse.x, mouse.y)
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton) {
+                    root.toggleSectionPopout("audio");
+                    return;
+                }
+                root.toggleAudioOutput();
+            }
+        }
+    }
+
     function openDetailsPopout() {
         closePopoutTimer.stop();
-        if (root.detailsPopoutOpen)
-            return ;
-
-        root.triggerPopout();
-        root.detailsPopoutOpen = true;
+        if (root.popoutTriggerMode !== "hover")
+            return;
+        const sectionKey = root.currentPopoutSection;
+        if (!sectionKey)
+            return;
+        root.openSectionPopout(sectionKey);
     }
 
     function scheduleClosePopout() {
@@ -724,11 +971,14 @@ PluginComponent {
 
     function closeDetailsPopout() {
         closePopoutTimer.stop();
-        if (!root.detailsPopoutOpen)
+        if (!sectionPopout.shouldBeVisible)
             return ;
 
-        root.closePopout();
+        sectionPopout.close();
         root.detailsPopoutOpen = false;
+        root.hoveredSection = "";
+        if (root.popoutTriggerMode === "click")
+            root.activePopoutSection = "";
     }
 
     function refreshBarsForLayoutChange() {
@@ -823,283 +1073,377 @@ PluginComponent {
         }
     }
 
-    component HorizontalNetworkSection: Row {
+    component HorizontalNetworkSection: Rectangle {
         id: horizontalNetwork
 
-        spacing: root.barGap
+        implicitWidth: networkContent.implicitWidth + root.networkShellPadding * 2
+        implicitHeight: root.sectionPillThickness
+        radius: root.sectionPillRadius
+        color: horizontalNetworkHover.hovered ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+
+        Component.onCompleted: root.registerSectionAnchor("network", horizontalNetwork)
+        Component.onDestruction: root.unregisterSectionAnchor("network", horizontalNetwork)
 
         HoverHandler {
+            id: horizontalNetworkHover
             onHoveredChanged: {
                 if (hovered)
-                    root.hoveredSection = "network";
-                else if (root.hoveredSection === "network")
-                    root.hoveredSection = "";
+                    root.handleSectionHover("network");
+                else
+                    root.clearHoveredSection("network");
             }
         }
 
-        StyledText {
-            width: Math.ceil(networkLabelMetrics.advanceWidth)
-            anchors.verticalCenter: parent.verticalCenter
-            horizontalAlignment: Text.AlignRight
-            text: "↓ " + root.formatCompactNetworkSpeed(root.currentDownloadRate)
-            color: Theme.info
-            font.pixelSize: root.overallTextSize()
-            font.weight: Font.Medium
-        }
-
-        Rectangle {
-            width: root.networkChartWidth
-            height: Math.max(root.networkChartHeight, root.minBarHeight + 1)
-            anchors.verticalCenter: parent.verticalCenter
-            radius: Math.min(root.cornerRadius + 1, height / 2)
-            color: Theme.surfaceContainerHigh
-            border.width: 1
-            border.color: Theme.outline
-            clip: true
-
-            NetworkHistoryChart {
-                anchors.fill: parent
-                anchors.margins: 1
-                downloadSeries: root.networkDownloadHistory
-                uploadSeries: root.networkUploadHistory
-                downloadPeak: root.peakDownloadRate
-                uploadPeak: root.peakUploadRate
-                strokeWidth: root.networkLineWidth
-                gridVisible: root.showNetworkGrid
-            }
-        }
-
-        StyledText {
-            width: Math.ceil(networkLabelMetrics.advanceWidth)
-            anchors.verticalCenter: parent.verticalCenter
-            text: "↑ " + root.formatCompactNetworkSpeed(root.currentUploadRate)
-            color: Theme.error
-            font.pixelSize: root.overallTextSize()
-            font.weight: Font.Medium
-        }
-    }
-
-    component VerticalNetworkSection: Column {
-        id: verticalNetwork
-
-        property int availableWidth: Math.max(root.widgetThickness - root.padding * 2, root.minBarHeight + 1)
-
-        width: availableWidth
-        spacing: root.barGap
-
-        HoverHandler {
-            onHoveredChanged: {
-                if (hovered)
-                    root.hoveredSection = "network";
-                else if (root.hoveredSection === "network")
-                    root.hoveredSection = "";
-            }
-        }
-
-        StyledText {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: "↓ " + root.formatCompactNetworkSpeed(root.currentDownloadRate)
-            color: Theme.info
-            font.pixelSize: Math.max(8, root.overallTextSize() - 1)
-            font.weight: Font.Medium
-        }
-
-        Rectangle {
-            width: parent.width
-            height: Math.max(root.networkChartHeight * 2, root.barWidth * 3)
-            radius: Math.min(root.cornerRadius + 1, height / 3)
-            color: Theme.surfaceContainerHigh
-            border.width: 1
-            border.color: Theme.outline
-            clip: true
-
-            NetworkHistoryChart {
-                anchors.fill: parent
-                anchors.margins: 1
-                downloadSeries: root.networkDownloadHistory
-                uploadSeries: root.networkUploadHistory
-                downloadPeak: root.peakDownloadRate
-                uploadPeak: root.peakUploadRate
-                strokeWidth: root.networkLineWidth
-                gridVisible: root.showNetworkGrid
-            }
-        }
-
-        StyledText {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: "↑ " + root.formatCompactNetworkSpeed(root.currentUploadRate)
-            color: Theme.error
-            font.pixelSize: Math.max(8, root.overallTextSize() - 1)
-            font.weight: Font.Medium
-        }
-    }
-
-    component HorizontalMetricSection: Row {
-        id: horizontalSection
-
-        property string sectionKey: "cpu"
-
-        spacing: root.sectionPadding
-
-        HoverHandler {
-            onHoveredChanged: {
-                if (hovered)
-                    root.hoveredSection = horizontalSection.sectionKey;
-                else if (root.hoveredSection === horizontalSection.sectionKey)
-                    root.hoveredSection = "";
+        TapHandler {
+            acceptedButtons: Qt.LeftButton
+            onTapped: {
+                if (root.popoutTriggerMode === "click")
+                    root.toggleSectionPopout("network");
             }
         }
 
         Row {
-            anchors.verticalCenter: parent.verticalCenter
+            id: networkContent
+
+            anchors.centerIn: parent
             spacing: root.barGap
 
-            Repeater {
-                model: root.sectionBarCount(horizontalSection.sectionKey)
-
-                delegate: Item {
-                    width: root.barWidth
-                    height: Math.max(root.widgetThickness - root.padding * 2, root.minBarHeight + 1)
-
-                    Rectangle {
-                        width: parent.width
-                        height: root.verticalHeightFor(horizontalSection.sectionKey, index, parent.height)
-                        anchors.bottom: parent.bottom
-                        radius: Math.min(root.cornerRadius, width / 2)
-                        color: root.sectionColorFor(horizontalSection.sectionKey, index)
-                        opacity: 0.96
-
-                        Behavior on height {
-                            NumberAnimation {
-                                duration: root.animationDuration
-                                easing.type: Easing.OutCubic
-                            }
-
-                        }
-
-                    }
-
-                }
-
-            }
-
-        }
-
-        Row {
-            visible: root.showOverallPercentage
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 2
-
-            DankIcon {
-                name: root.sectionIcon(horizontalSection.sectionKey)
-                size: root.compactIconSize
-                color: root.sectionColorFor(horizontalSection.sectionKey, 0)
+            StyledText {
+                width: Math.ceil(networkLabelMetrics.advanceWidth)
                 anchors.verticalCenter: parent.verticalCenter
+                horizontalAlignment: Text.AlignRight
+                text: "↓ " + root.formatCompactNetworkSpeed(root.currentDownloadRate)
+                color: Theme.info
+                font.pixelSize: root.overallTextSize()
+                font.weight: Font.Medium
             }
 
-            Item {
-                width: Math.ceil(overallPercentageMetrics.advanceWidth)
-                height: horizontalMetricLabel.implicitHeight
+            Rectangle {
+                width: root.networkChartWidth
+                height: Math.min(root.sectionContentThickness, Math.max(root.networkChartHeight, root.minBarHeight + 1))
+                anchors.verticalCenter: parent.verticalCenter
+                radius: Math.min(root.cornerRadius + 1, height / 2)
+                color: Theme.surfaceContainer
+                clip: true
 
-                StyledText {
-                    id: horizontalMetricLabel
-
+                NetworkHistoryChart {
                     anchors.fill: parent
-                    horizontalAlignment: Text.AlignRight
-                    verticalAlignment: Text.AlignVCenter
-                    text: root.sectionPercentageText(horizontalSection.sectionKey)
-                    color: Theme.widgetTextColor
-                    font.pixelSize: root.overallTextSize()
-                    font.weight: Font.Medium
+                    anchors.margins: 1
+                    downloadSeries: root.networkDownloadHistory
+                    uploadSeries: root.networkUploadHistory
+                    downloadPeak: root.peakDownloadRate
+                    uploadPeak: root.peakUploadRate
+                    strokeWidth: root.networkLineWidth
+                    gridVisible: root.showNetworkGrid
                 }
+            }
+
+            StyledText {
+                width: Math.ceil(networkLabelMetrics.advanceWidth)
+                anchors.verticalCenter: parent.verticalCenter
+                text: "↑ " + root.formatCompactNetworkSpeed(root.currentUploadRate)
+                color: Theme.error
+                font.pixelSize: root.overallTextSize()
+                font.weight: Font.Medium
             }
         }
     }
 
-    component VerticalMetricSection: Column {
-        id: verticalSection
+    component VerticalNetworkSection: Rectangle {
+        id: verticalNetwork
 
-        property string sectionKey: "cpu"
-        property int availableWidth: Math.max(root.widgetThickness - root.padding * 2, root.minBarHeight + 1)
-        property bool fillFromLeft: root.axis?.edge === "left"
+        property int availableWidth: root.sectionPillThickness
 
-        width: availableWidth
-        spacing: root.sectionPadding
+        implicitWidth: availableWidth + root.networkShellPadding * 2
+        implicitHeight: verticalNetworkContent.implicitHeight + root.networkShellPadding * 2
+        radius: root.sectionPillRadius
+        color: verticalNetworkHover.hovered ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+
+        Component.onCompleted: root.registerSectionAnchor("network", verticalNetwork)
+        Component.onDestruction: root.unregisterSectionAnchor("network", verticalNetwork)
 
         HoverHandler {
+            id: verticalNetworkHover
             onHoveredChanged: {
                 if (hovered)
-                    root.hoveredSection = verticalSection.sectionKey;
-                else if (root.hoveredSection === verticalSection.sectionKey)
-                    root.hoveredSection = "";
+                    root.handleSectionHover("network");
+                else
+                    root.clearHoveredSection("network");
+            }
+        }
+
+        TapHandler {
+            acceptedButtons: Qt.LeftButton
+            onTapped: {
+                if (root.popoutTriggerMode === "click")
+                    root.toggleSectionPopout("network");
             }
         }
 
         Column {
-            width: parent.width
+            id: verticalNetworkContent
+
+            anchors.centerIn: parent
             spacing: root.barGap
 
-            Repeater {
-                model: root.sectionBarCount(verticalSection.sectionKey)
-
-                delegate: Item {
-                    width: parent.width
-                    height: root.barWidth
-
-                    Rectangle {
-                        height: parent.height
-                        width: root.horizontalLengthFor(verticalSection.sectionKey, index, parent.width)
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.left: verticalSection.fillFromLeft ? parent.left : undefined
-                        anchors.right: verticalSection.fillFromLeft ? undefined : parent.right
-                        radius: Math.min(root.cornerRadius, height / 2)
-                        color: root.sectionColorFor(verticalSection.sectionKey, index)
-                        opacity: 0.96
-
-                        Behavior on width {
-                            NumberAnimation {
-                                duration: root.animationDuration
-                                easing.type: Easing.OutCubic
-                            }
-
-                        }
-
-                    }
-
-                }
-
+            StyledText {
+                width: verticalNetwork.availableWidth
+                horizontalAlignment: Text.AlignHCenter
+                text: "↓ " + root.formatCompactNetworkSpeed(root.currentDownloadRate)
+                color: Theme.info
+                font.pixelSize: Math.max(8, root.overallTextSize() - 1)
+                font.weight: Font.Medium
             }
 
+            Rectangle {
+                width: verticalNetwork.availableWidth
+                height: Math.max(root.networkChartHeight * 2, root.sectionContentThickness)
+                radius: Math.min(root.cornerRadius + 1, height / 3)
+                color: Theme.surfaceContainer
+                clip: true
+
+                NetworkHistoryChart {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    downloadSeries: root.networkDownloadHistory
+                    uploadSeries: root.networkUploadHistory
+                    downloadPeak: root.peakDownloadRate
+                    uploadPeak: root.peakUploadRate
+                    strokeWidth: root.networkLineWidth
+                    gridVisible: root.showNetworkGrid
+                }
+            }
+
+            StyledText {
+                width: verticalNetwork.availableWidth
+                horizontalAlignment: Text.AlignHCenter
+                text: "↑ " + root.formatCompactNetworkSpeed(root.currentUploadRate)
+                color: Theme.error
+                font.pixelSize: Math.max(8, root.overallTextSize() - 1)
+                font.weight: Font.Medium
+            }
+        }
+    }
+
+    component HorizontalMetricSection: Rectangle {
+        id: horizontalSection
+
+        property string sectionKey: "cpu"
+        property string registeredSectionKey: ""
+
+        implicitWidth: metricContent.implicitWidth + root.sectionShellPadding * 2
+        implicitHeight: root.sectionPillThickness
+        radius: root.sectionPillRadius
+        color: horizontalMetricHover.hovered ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+
+        function refreshAnchorRegistration() {
+            if (registeredSectionKey.length > 0 && registeredSectionKey !== sectionKey)
+                root.unregisterSectionAnchor(registeredSectionKey, horizontalSection);
+            if (sectionKey.length > 0) {
+                root.registerSectionAnchor(sectionKey, horizontalSection);
+                registeredSectionKey = sectionKey;
+            }
+        }
+
+        Component.onCompleted: refreshAnchorRegistration()
+        Component.onDestruction: root.unregisterSectionAnchor(registeredSectionKey, horizontalSection)
+        onSectionKeyChanged: refreshAnchorRegistration()
+
+        HoverHandler {
+            id: horizontalMetricHover
+            onHoveredChanged: {
+                if (hovered)
+                    root.handleSectionHover(horizontalSection.sectionKey);
+                else
+                    root.clearHoveredSection(horizontalSection.sectionKey);
+            }
+        }
+
+        TapHandler {
+            acceptedButtons: Qt.LeftButton
+            onTapped: {
+                if (root.popoutTriggerMode === "click")
+                    root.toggleSectionPopout(horizontalSection.sectionKey);
+            }
         }
 
         Row {
-            visible: root.showOverallPercentage
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 2
+            id: metricContent
 
-            DankIcon {
-                name: root.sectionIcon(verticalSection.sectionKey)
-                size: Math.min(root.compactIconSize, verticalSection.availableWidth)
-                color: root.sectionColorFor(verticalSection.sectionKey, 0)
+            anchors.centerIn: parent
+            spacing: root.sectionPadding
+
+            Row {
                 anchors.verticalCenter: parent.verticalCenter
+                spacing: root.barGap
+
+                Repeater {
+                    model: root.sectionBarCount(horizontalSection.sectionKey)
+
+                    delegate: Item {
+                        width: root.barWidth
+                        height: root.sectionContentThickness
+
+                        Rectangle {
+                            width: parent.width
+                            height: root.verticalHeightFor(horizontalSection.sectionKey, index, parent.height)
+                            anchors.bottom: parent.bottom
+                            radius: Math.min(root.cornerRadius, width / 2)
+                            color: root.sectionColorFor(horizontalSection.sectionKey, index)
+                            opacity: 0.96
+
+                            Behavior on height {
+                                NumberAnimation {
+                                    duration: root.animationDuration
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
-            Item {
-                width: Math.min(verticalSection.width, Math.ceil(overallPercentageMetrics.advanceWidth))
-                height: verticalMetricLabel.implicitHeight
+            Row {
+                visible: root.showOverallPercentage
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 2
 
-                StyledText {
-                    id: verticalMetricLabel
+                DankIcon {
+                    name: root.sectionIcon(horizontalSection.sectionKey)
+                    size: root.compactIconSize
+                    color: root.sectionColorFor(horizontalSection.sectionKey, 0)
+                    anchors.verticalCenter: parent.verticalCenter
+                }
 
-                    anchors.fill: parent
-                    horizontalAlignment: Text.AlignRight
-                    verticalAlignment: Text.AlignVCenter
-                    text: root.sectionPercentageText(verticalSection.sectionKey)
-                    color: Theme.widgetTextColor
-                    font.pixelSize: root.overallTextSize()
-                    font.weight: Font.Medium
+                Item {
+                    width: Math.ceil(overallPercentageMetrics.advanceWidth)
+                    height: horizontalMetricLabel.implicitHeight
+
+                    StyledText {
+                        id: horizontalMetricLabel
+
+                        anchors.fill: parent
+                        horizontalAlignment: Text.AlignRight
+                        verticalAlignment: Text.AlignVCenter
+                        text: root.sectionPercentageText(horizontalSection.sectionKey)
+                        color: Theme.widgetTextColor
+                        font.pixelSize: root.overallTextSize()
+                        font.weight: Font.Medium
+                    }
+                }
+            }
+        }
+    }
+
+    component VerticalMetricSection: Rectangle {
+        id: verticalSection
+
+        property string sectionKey: "cpu"
+        property int availableWidth: root.sectionPillThickness
+        property bool fillFromLeft: root.axis?.edge === "left"
+        property string registeredSectionKey: ""
+
+        implicitWidth: availableWidth + root.sectionShellPadding * 2
+        implicitHeight: verticalMetricContent.implicitHeight + root.sectionShellPadding * 2
+        radius: root.sectionPillRadius
+        color: verticalMetricHover.hovered ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+
+        function refreshAnchorRegistration() {
+            if (registeredSectionKey.length > 0 && registeredSectionKey !== sectionKey)
+                root.unregisterSectionAnchor(registeredSectionKey, verticalSection);
+            if (sectionKey.length > 0) {
+                root.registerSectionAnchor(sectionKey, verticalSection);
+                registeredSectionKey = sectionKey;
+            }
+        }
+
+        Component.onCompleted: refreshAnchorRegistration()
+        Component.onDestruction: root.unregisterSectionAnchor(registeredSectionKey, verticalSection)
+        onSectionKeyChanged: refreshAnchorRegistration()
+
+        HoverHandler {
+            id: verticalMetricHover
+            onHoveredChanged: {
+                if (hovered)
+                    root.handleSectionHover(verticalSection.sectionKey);
+                else
+                    root.clearHoveredSection(verticalSection.sectionKey);
+            }
+        }
+
+        TapHandler {
+            acceptedButtons: Qt.LeftButton
+            onTapped: {
+                if (root.popoutTriggerMode === "click")
+                    root.toggleSectionPopout(verticalSection.sectionKey);
+            }
+        }
+
+        Column {
+            id: verticalMetricContent
+
+            anchors.centerIn: parent
+            spacing: root.sectionPadding
+
+            Column {
+                width: verticalSection.availableWidth
+                spacing: root.barGap
+
+                Repeater {
+                    model: root.sectionBarCount(verticalSection.sectionKey)
+
+                    delegate: Item {
+                        width: parent.width
+                        height: root.barWidth
+
+                        Rectangle {
+                            height: parent.height
+                            width: root.horizontalLengthFor(verticalSection.sectionKey, index, parent.width)
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: verticalSection.fillFromLeft ? parent.left : undefined
+                            anchors.right: verticalSection.fillFromLeft ? undefined : parent.right
+                            radius: Math.min(root.cornerRadius, height / 2)
+                            color: root.sectionColorFor(verticalSection.sectionKey, index)
+                            opacity: 0.96
+
+                            Behavior on width {
+                                NumberAnimation {
+                                    duration: root.animationDuration
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row {
+                visible: root.showOverallPercentage
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 2
+
+                DankIcon {
+                    name: root.sectionIcon(verticalSection.sectionKey)
+                    size: Math.min(root.compactIconSize, verticalSection.availableWidth)
+                    color: root.sectionColorFor(verticalSection.sectionKey, 0)
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Item {
+                    width: Math.min(verticalSection.availableWidth, Math.ceil(overallPercentageMetrics.advanceWidth))
+                    height: verticalMetricLabel.implicitHeight
+
+                    StyledText {
+                        id: verticalMetricLabel
+
+                        anchors.fill: parent
+                        horizontalAlignment: Text.AlignRight
+                        verticalAlignment: Text.AlignVCenter
+                        text: root.sectionPercentageText(verticalSection.sectionKey)
+                        color: Theme.widgetTextColor
+                        font.pixelSize: root.overallTextSize()
+                        font.weight: Font.Medium
+                    }
                 }
             }
         }
@@ -1135,12 +1479,14 @@ PluginComponent {
 
     layerNamespacePlugin: "cpu-core-visualizer"
     Component.onCompleted: {
+        root.ensureTransparentHostPill();
         DgopService.addRef(["cpu", "memory", "diskmounts", "processes", "network"]);
         root.syncAnimatedUsage(true);
         root.appendNetworkHistorySample(root.currentDownloadRate, root.currentUploadRate);
         DgopService.updateAllStats();
         root.queueNetworkHistoryCapture();
     }
+    onBarConfigChanged: root.ensureTransparentHostPill()
     Component.onDestruction: {
         closePopoutTimer.stop();
         networkHistoryCaptureTimer.stop();
@@ -1242,6 +1588,13 @@ PluginComponent {
 
                 }
 
+                Loader {
+                    anchors.verticalCenter: parent.verticalCenter
+                    active: root.audioQuickSwitchEnabled
+                    sourceComponent: HorizontalAudioToggleButton {
+                    }
+                }
+
             }
 
             HoverHandler {
@@ -1249,10 +1602,9 @@ PluginComponent {
 
                 onHoveredChanged: {
                     root.barHovered = hovered;
-                    if (hovered)
+                    if (hovered && root.popoutTriggerMode === "hover")
                         root.openDetailsPopout();
                     else {
-                        root.hoveredSection = "";
                         root.scheduleClosePopout();
                     }
                 }
@@ -1267,7 +1619,7 @@ PluginComponent {
             id: verticalRoot
 
             implicitWidth: root.widgetThickness
-            implicitHeight: root.padding * 2 + verticalContent.implicitHeight
+            implicitHeight: root.padding * 2 + verticalContent.implicitHeight + root.sectionOuterMargin * 2
 
             Column {
                 id: verticalContent
@@ -1291,6 +1643,13 @@ PluginComponent {
 
                 }
 
+                Loader {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    active: root.audioQuickSwitchEnabled
+                    sourceComponent: VerticalAudioToggleButton {
+                    }
+                }
+
             }
 
             HoverHandler {
@@ -1298,10 +1657,9 @@ PluginComponent {
 
                 onHoveredChanged: {
                     root.barHovered = hovered;
-                    if (hovered)
+                    if (hovered && root.popoutTriggerMode === "hover")
                         root.openDetailsPopout();
                     else {
-                        root.hoveredSection = "";
                         root.scheduleClosePopout();
                     }
                 }
@@ -1311,31 +1669,43 @@ PluginComponent {
 
     }
 
-    popoutContent: Component {
+    Component {
+        id: detailsPanelComponent
+
         PopoutComponent {
             id: detailsPopout
 
             headerText: {
                 if (root.defaultPopoutSection === "")
                     return "Details";
-                if ((root.hoveredSection || root.defaultPopoutSection) === "memory")
+                if (root.currentPopoutSection === "audio")
+                    return "Audio";
+                if (root.currentPopoutSection === "memory")
                     return "Memory";
-                if ((root.hoveredSection || root.defaultPopoutSection) === "disk")
+                if (root.currentPopoutSection === "disk")
                     return "Storage";
-                if ((root.hoveredSection || root.defaultPopoutSection) === "network")
+                if (root.currentPopoutSection === "network")
                     return "Network";
                 return "CPU";
             }
             detailsText: {
-                if ((root.hoveredSection || root.defaultPopoutSection) === "memory") {
+                if (root.currentPopoutSection === "audio") {
+                    if (!AudioService.sink)
+                        return "No audio output available";
+                    let label = AudioService.displayName(AudioService.sink);
+                    const volume = AudioService.sink?.audio ? Math.round(AudioService.sink.audio.volume * 100) : 0;
+                    const muted = AudioService.sink?.audio?.muted ? "  |  muted" : "";
+                    return label + "  |  " + volume + "%" + muted;
+                }
+                if (root.currentPopoutSection === "memory") {
                     const total = Number(DgopService.totalMemoryKB || 0);
                     if (total <= 0)
                         return "Waiting for memory stats";
                     return DgopService.formatSystemMemory(DgopService.usedMemoryKB) + " / " + DgopService.formatSystemMemory(total) + "  |  " + root.memoryUsageValue.toFixed(0) + "%";
                 }
-                if ((root.hoveredSection || root.defaultPopoutSection) === "disk")
+                if (root.currentPopoutSection === "disk")
                     return root.diskSelectionLabel;
-                if ((root.hoveredSection || root.defaultPopoutSection) === "network")
+                if (root.currentPopoutSection === "network")
                     return "";
                 if (root.defaultPopoutSection === "")
                     return "Enable at least one section to show data here";
@@ -1345,13 +1715,13 @@ PluginComponent {
 
             Connections {
                 function onShouldBeVisibleChanged() {
-                    root.detailsPopoutOpen = detailsPopout.parentPopout ? detailsPopout.parentPopout.shouldBeVisible : false;
+                    root.detailsPopoutOpen = sectionPopout.shouldBeVisible;
                     if (!root.detailsPopoutOpen)
                         root.popoutHovered = false;
 
                 }
 
-                target: detailsPopout.parentPopout
+                target: sectionPopout
             }
 
             Item {
@@ -1379,9 +1749,131 @@ PluginComponent {
                     width: parent.width
                     spacing: Theme.spacingS
 
+                    Column {
+                        visible: root.currentPopoutSection === "audio"
+                        width: parent.width
+                        spacing: Theme.spacingM
+
+                        Rectangle {
+                            width: parent.width
+                            height: 72
+                            radius: Theme.cornerRadius
+                            color: Theme.surfaceContainerHigh
+
+                            Row {
+                                anchors.fill: parent
+                                anchors.leftMargin: Theme.spacingM
+                                anchors.rightMargin: Theme.spacingM
+                                spacing: Theme.spacingM
+
+                                DankIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    name: root.audioButtonIcon()
+                                    size: Theme.iconSizeLarge
+                                    color: Theme.primary
+                                    filled: true
+                                }
+
+                                Column {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width - Theme.iconSizeLarge - Theme.spacingM * 2
+                                    spacing: Theme.spacingXS
+
+                                    StyledText {
+                                        width: parent.width
+                                        text: AudioService.sink ? AudioService.displayName(AudioService.sink) : "No audio output"
+                                        color: Theme.surfaceText
+                                        font.pixelSize: Theme.fontSizeMedium
+                                        font.weight: Font.Medium
+                                        elide: Text.ElideRight
+                                    }
+
+                                    StyledText {
+                                        width: parent.width
+                                        text: AudioService.sink ? "Left-click the bar button to switch outputs. Right-click to pin this panel." : ""
+                                        color: Theme.surfaceVariantText
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        wrapMode: Text.WordWrap
+                                    }
+                                }
+                            }
+                        }
+
+                        Row {
+                            width: parent.width
+                            spacing: Theme.spacingS
+
+                            Rectangle {
+                                width: 40
+                                height: 40
+                                radius: 20
+                                color: audioMuteMouse.containsMouse ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+
+                                DankRipple {
+                                    id: audioMuteRipple
+                                    cornerRadius: parent.radius
+                                }
+
+                                MouseArea {
+                                    id: audioMuteMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onPressed: mouse => audioMuteRipple.trigger(mouse.x, mouse.y)
+                                    onClicked: {
+                                        if (AudioService.sink?.audio)
+                                            AudioService.sink.audio.muted = !AudioService.sink.audio.muted;
+                                    }
+                                }
+
+                                DankIcon {
+                                    anchors.centerIn: parent
+                                    name: {
+                                        if (!AudioService.sink?.audio)
+                                            return "volume_off";
+                                        if (AudioService.sink.audio.muted)
+                                            return "volume_off";
+                                        if (AudioService.sink.audio.volume === 0)
+                                            return "volume_mute";
+                                        if (AudioService.sink.audio.volume <= 0.33)
+                                            return "volume_down";
+                                        return "volume_up";
+                                    }
+                                    size: Theme.iconSize
+                                    color: AudioService.sink?.audio && !AudioService.sink.audio.muted && AudioService.sink.audio.volume > 0 ? Theme.primary : Theme.surfaceText
+                                }
+                            }
+
+                            DankSlider {
+                                readonly property real actualVolumePercent: AudioService.sink?.audio ? Math.round(AudioService.sink.audio.volume * 100) : 0
+
+                                width: parent.width - 40 - Theme.spacingS
+                                enabled: AudioService.sink?.audio != null
+                                minimum: 0
+                                maximum: AudioService.sinkMaxVolume
+                                value: AudioService.sink?.audio ? Math.min(AudioService.sinkMaxVolume, Math.round(AudioService.sink.audio.volume * 100)) : 0
+                                showValue: true
+                                unit: "%"
+                                valueOverride: actualVolumePercent
+                                thumbOutlineColor: Theme.surfaceContainer
+                                trackColor: Theme.ccSliderTrackColor
+                                trackOpacity: Theme.ccSliderTrackOpacity
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                onSliderValueChanged: function (newValue) {
+                                    if (AudioService.sink?.audio) {
+                                        AudioService.sink.audio.volume = newValue / 100.0;
+                                        if (newValue > 0 && AudioService.sink.audio.muted)
+                                            AudioService.sink.audio.muted = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // ── CPU / overview view ──────────────────────────────────
                     Column {
-                        visible: (root.hoveredSection || root.defaultPopoutSection) === "cpu"
+                        visible: root.currentPopoutSection === "cpu"
                         width: parent.width
                         spacing: Theme.spacingS
 
@@ -1480,7 +1972,7 @@ PluginComponent {
 
                     // ── Memory view ──────────────────────────────────────────
                     Column {
-                        visible: (root.hoveredSection || root.defaultPopoutSection) === "memory"
+                        visible: root.currentPopoutSection === "memory"
                         width: parent.width
                         spacing: Theme.spacingS
 
@@ -1653,7 +2145,7 @@ PluginComponent {
 
                     // ── Disk view ────────────────────────────────────────────
                     Column {
-                        visible: (root.hoveredSection || root.defaultPopoutSection) === "disk"
+                        visible: root.currentPopoutSection === "disk"
                         width: parent.width
                         spacing: Theme.spacingS
 
@@ -1743,7 +2235,7 @@ PluginComponent {
 
                     // ── Network view ──────────────────────────────────────────
                     Column {
-                        visible: (root.hoveredSection || root.defaultPopoutSection) === "network"
+                        visible: root.currentPopoutSection === "network"
                         width: parent.width
                         spacing: Theme.spacingS
                         Rectangle {
@@ -1897,4 +2389,10 @@ PluginComponent {
 
     }
 
+    PluginPopout {
+        id: sectionPopout
+        contentWidth: root.popoutWidth
+        contentHeight: root.popoutHeight
+        pluginContent: detailsPanelComponent
+    }
 }

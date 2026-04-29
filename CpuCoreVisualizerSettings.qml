@@ -1,12 +1,35 @@
 import QtQuick
 import qs.Common
 import qs.Modules.Plugins
+import qs.Services
 import qs.Widgets
 
 PluginSettings {
     id: root
 
     pluginId: "cpuCoreVisualizer"
+
+    readonly property var audioOutputOptions: {
+        const options = [{
+            label: "Auto cycle all outputs",
+            value: ""
+        }];
+        const sinks = AudioService.getAvailableSinks();
+        if (!Array.isArray(sinks))
+            return options;
+
+        for (let i = 0; i < sinks.length; i++) {
+            const node = sinks[i];
+            const label = AudioService.displayName(node);
+            const subtitle = AudioService.subtitle(node.name || "");
+            options.push({
+                label: subtitle.length > 0 ? label + " (" + subtitle + ")" : label,
+                value: node.name || ""
+            });
+        }
+
+        return options;
+    }
 
     function sectionLabelForKey(key) {
         if (key === "cpu")
@@ -218,6 +241,36 @@ PluginSettings {
     }
 
     SectionOrderSetting {
+    }
+
+    ToggleSetting {
+        settingKey: "audioQuickSwitchEnabled"
+        label: "Show Audio Output Button"
+        description: "Show a clickable output button in the bar that switches sinks and reflects the current device type."
+        defaultValue: false
+    }
+
+    ToggleSetting {
+        settingKey: "popoutOpenOnClick"
+        label: "Open Popouts On Click"
+        description: "Use click instead of hover for section popouts. The audio button still switches outputs on left-click and opens its panel on right-click."
+        defaultValue: false
+    }
+
+    SelectionSetting {
+        settingKey: "audioQuickSwitchPrimary"
+        label: "Quick Toggle Output 1"
+        description: "First preferred output. Leave on auto-cycle to rotate through all currently available outputs."
+        options: root.audioOutputOptions
+        defaultValue: ""
+    }
+
+    SelectionSetting {
+        settingKey: "audioQuickSwitchSecondary"
+        label: "Quick Toggle Output 2"
+        description: "Optional second preferred output. When both outputs are set, the widget flips between just these two."
+        options: root.audioOutputOptions
+        defaultValue: ""
     }
 
     SliderSetting {
