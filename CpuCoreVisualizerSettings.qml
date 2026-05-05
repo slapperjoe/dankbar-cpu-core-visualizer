@@ -48,6 +48,8 @@ PluginSettings {
     function sectionLabelForKey(key) {
         if (key === "cpu")
             return "CPU";
+        if (key === "gpu")
+            return "GPU";
         if (key === "memory")
             return "Memory";
         if (key === "disk")
@@ -60,6 +62,8 @@ PluginSettings {
     function sectionKeyForLabel(label) {
         if (label === "CPU")
             return "cpu";
+        if (label === "GPU")
+            return "gpu";
         if (label === "Memory")
             return "memory";
         if (label === "Disk")
@@ -76,16 +80,18 @@ PluginSettings {
             return "2nd Slot";
         if (index === 2)
             return "3rd Slot";
-        return "4th Slot";
+        if (index === 3)
+            return "4th Slot";
+        return "5th Slot";
     }
 
     function normalizedSectionSlots(candidate) {
         let normalized = [];
         let used = {};
-        const validKeys = ["cpu", "memory", "disk", "network"];
+        const validKeys = ["cpu", "gpu", "memory", "disk", "network"];
         const source = Array.isArray(candidate) ? candidate : [];
 
-        for (let i = 0; i < Math.min(4, source.length); i++) {
+        for (let i = 0; i < Math.min(5, source.length); i++) {
             const key = String(source[i] || "off");
             if (key === "off") {
                 normalized.push("off");
@@ -97,7 +103,7 @@ PluginSettings {
             }
         }
 
-        while (normalized.length < 4)
+        while (normalized.length < 5)
             normalized.push("off");
 
         return normalized;
@@ -110,20 +116,25 @@ PluginSettings {
             order: Number(root.loadValue("cpuSectionOrder", 1)) || 1,
             fallbackIndex: 0
         }, {
+            key: "gpu",
+            enabled: Boolean(root.loadValue("showGpuSection", true)),
+            order: Number(root.loadValue("gpuSectionOrder", 5)) || 5,
+            fallbackIndex: 1
+        }, {
             key: "memory",
             enabled: Boolean(root.loadValue("showMemorySection", true)),
             order: Number(root.loadValue("memorySectionOrder", 2)) || 2,
-            fallbackIndex: 1
+            fallbackIndex: 2
         }, {
             key: "disk",
             enabled: Boolean(root.loadValue("showDiskSection", true)),
             order: Number(root.loadValue("diskSectionOrder", 3)) || 3,
-            fallbackIndex: 2
+            fallbackIndex: 3
         }, {
             key: "network",
             enabled: Boolean(root.loadValue("showNetworkSection", true)),
             order: Number(root.loadValue("networkSectionOrder", 4)) || 4,
-            fallbackIndex: 3
+            fallbackIndex: 4
         }];
 
         sections.sort((left, right) => {
@@ -145,7 +156,7 @@ PluginSettings {
     component SectionOrderSetting: Column {
         id: sectionOrderSetting
 
-        property var slots: ["cpu", "memory", "disk", "network"]
+        property var slots: ["cpu", "gpu", "memory", "disk", "network"]
         property bool syncing: false
 
         width: parent.width
@@ -196,14 +207,14 @@ PluginSettings {
         }
 
         Repeater {
-            model: 4
+            model: 5
 
             delegate: DankDropdown {
                 width: sectionOrderSetting.width
                 text: root.slotLabel(index)
                 description: "Pick the section shown in this position"
                 currentValue: root.sectionLabelForKey(sectionOrderSetting.slots[index])
-                options: ["CPU", "Memory", "Disk", "Network", "Off"]
+                options: ["CPU", "GPU", "Memory", "Disk", "Network", "Off"]
                 onValueChanged: newValue => {
                     sectionOrderSetting.setSlot(index, root.sectionKeyForLabel(newValue));
                 }
@@ -221,7 +232,7 @@ PluginSettings {
 
     StyledText {
         width: parent.width
-        text: "Per-core CPU, memory, and disk bars plus a rolling network download/upload chart."
+        text: "Per-core CPU plus GPU, memory, disk, and rolling network monitoring."
         font.pixelSize: Theme.fontSizeSmall
         color: Theme.surfaceVariantText
         wrapMode: Text.WordWrap
@@ -243,8 +254,8 @@ PluginSettings {
 
     ToggleSetting {
         settingKey: "showOverallPercentage"
-        label: "Show Overall CPU %"
-        description: "Show total CPU percentage beside the core bars"
+        label: "Show Section Values"
+        description: "Show the compact value text beside each section"
         defaultValue: true
     }
 
@@ -284,7 +295,7 @@ PluginSettings {
     SliderSetting {
         settingKey: "probeInterval"
         label: "Probe Time"
-        description: "How often the plugin asks DgopService for fresh CPU samples"
+        description: "How often the plugin refreshes CPU, GPU, disk, memory, and network stats"
         defaultValue: 1000
         minimum: 250
         maximum: 3000
@@ -378,17 +389,6 @@ PluginSettings {
         maximum: 220
         unit: "px"
         leftIcon: "show_chart"
-    }
-
-    SliderSetting {
-        settingKey: "networkChartHeight"
-        label: "Network Chart Height"
-        description: "Height of the compact network history chart"
-        defaultValue: 24
-        minimum: 12
-        maximum: 56
-        unit: "px"
-        leftIcon: "height"
     }
 
     SliderSetting {

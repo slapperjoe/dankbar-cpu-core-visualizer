@@ -1,18 +1,19 @@
 # CPU Core Visualizer
 
-Per-core CPU bars plus memory, disk, and network throughput history for DankBar / DankMaterialShell.
+Per-core CPU bars plus NVIDIA GPU, memory, disk, and network throughput history for DankBar / DankMaterialShell.
 
 ## What it does
 
-- one bar per CPU core, plus dedicated memory and disk sections
+- one bar per CPU core, plus dedicated GPU, memory, and disk sections
 - a rolling one-minute network chart with separate download and upload scales
-- slot-based section visibility and ordering for CPU, memory, disk, and network
+- slot-based section visibility and ordering for CPU, GPU, memory, disk, and network
 - vivid or soft data-fill palettes while text and chrome follow the DankBar theme
-- compact icons to distinguish CPU, memory, and disk sections
+- compact icons to distinguish CPU, GPU, memory, and disk sections
 - selectable disk partitions for the disk usage section
-- configurable network chart width, height, line thickness, and grid
+- configurable network chart width, line thickness, and grid
 - optional usage percentages plus adjustable probe time and smoother motion
 - optional audio-output button with current-device icon and preferred-device selector row
+- NVIDIA GPU popout details for utilization, VRAM, clocks, power, encoder/decoder usage, and top GPU-memory processes
 
 ## Install
 
@@ -41,7 +42,8 @@ To install somewhere else, use:
 
 - top/bottom bars are the best-looking path right now
 - left/right bars still use horizontal strips, but they now fill inward from the bar edge
-- smoothness still depends on the host CPU refresh cadence
+- smoothness still depends on the host polling cadence
+- rich GPU telemetry currently depends on `nvidia-smi`, so the GPU section is NVIDIA-only
 
 ## Audio output button
 

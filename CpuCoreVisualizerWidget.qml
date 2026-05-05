@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import Quickshell.Services.Pipewire
 import qs.Common
 import qs.Modules.Plugins
@@ -23,7 +24,6 @@ PluginComponent {
     property int cornerRadius: Math.max(0, Math.round(numberSetting("cornerRadius", 2)))
     property int probeInterval: Math.max(250, Math.round(numberSetting("probeInterval", 1000)))
     property int networkChartWidth: Math.max(64, Math.round(numberSetting("networkChartWidth", 120)))
-    property int networkChartHeight: Math.max(12, Math.round(numberSetting("networkChartHeight", 24)))
     property real networkLineWidth: Math.max(1, Math.min(4, numberSetting("networkLineWidth", 2)))
     property real sharedWidgetPadding: (root.barConfig?.removeWidgetPadding ?? false) ? 0 : ((root.barConfig?.widgetPadding ?? 12) * (root.widgetThickness / 30))
     property int sectionShellPadding: Math.max(4, root.barGap + 3)
@@ -40,10 +40,12 @@ PluginComponent {
     property bool showMemorySection: boolSetting("showMemorySection", true)
     property bool showDiskSection: boolSetting("showDiskSection", true)
     property bool showNetworkSection: boolSetting("showNetworkSection", true)
-    property int cpuSectionOrder: Math.max(1, Math.min(4, Math.round(numberSetting("cpuSectionOrder", 1))))
-    property int memorySectionOrder: Math.max(1, Math.min(4, Math.round(numberSetting("memorySectionOrder", 2))))
-    property int diskSectionOrder: Math.max(1, Math.min(4, Math.round(numberSetting("diskSectionOrder", 3))))
-    property int networkSectionOrder: Math.max(1, Math.min(4, Math.round(numberSetting("networkSectionOrder", 4))))
+    property bool showGpuSection: boolSetting("showGpuSection", true)
+    property int cpuSectionOrder: Math.max(1, Math.min(5, Math.round(numberSetting("cpuSectionOrder", 1))))
+    property int memorySectionOrder: Math.max(1, Math.min(5, Math.round(numberSetting("memorySectionOrder", 2))))
+    property int diskSectionOrder: Math.max(1, Math.min(5, Math.round(numberSetting("diskSectionOrder", 3))))
+    property int networkSectionOrder: Math.max(1, Math.min(5, Math.round(numberSetting("networkSectionOrder", 4))))
+    property int gpuSectionOrder: Math.max(1, Math.min(5, Math.round(numberSetting("gpuSectionOrder", 5))))
     property real smoothingFactor: Math.max(0.08, Math.min(0.85, numberSetting("smoothingPercent", 28) / 100))
     property string rawColorMode: stringSetting("colorMode", "vivid")
     property string colorMode: (root.rawColorMode === "soft" || root.rawColorMode === "mono" || root.rawColorMode === "base") ? "soft" : "vivid"
@@ -60,8 +62,12 @@ PluginComponent {
     property var animatedCpuUsage: []
     property real animatedMemoryUsage: 0
     property var animatedDiskUsages: []
+    property var animatedGpuUsages: []
     property var networkDownloadHistory: []
     property var networkUploadHistory: []
+    property var gpuTelemetry: []
+    property var gpuProcesses: []
+    property bool nvidiaSmiAvailable: false
     property bool pendingNetworkHistoryCapture: false
     readonly property real totalCpuUsage: root.clampUsage(Number(DgopService.cpuUsage || 0))
     readonly property real memoryUsageValue: root.clampUsage(Number(DgopService.memoryUsage || 0))
@@ -93,6 +99,31 @@ PluginComponent {
         procs.sort((a, b) => (Number(b.memoryKB) || 0) - (Number(a.memoryKB) || 0));
         return procs.slice(0, 8);
     }
+    readonly property var topGpuProcesses: {
+        const procs = Array.isArray(root.gpuProcesses) ? root.gpuProcesses.slice() : [];
+        procs.sort((a, b) => (Number(b.usedMemoryMiB) || 0) - (Number(a.usedMemoryMiB) || 0));
+        return procs.slice(0, 8);
+    }
+    readonly property int primaryGpuIndex: {
+        if (!Array.isArray(root.gpuTelemetry) || root.gpuTelemetry.length <= 0)
+            return -1;
+
+        let selectedIndex = 0;
+        let selectedScore = -1;
+        for (let i = 0; i < root.gpuTelemetry.length; i++) {
+            const gpu = root.gpuTelemetry[i];
+            const utilization = root.clampUsage(Number(gpu && gpu.utilization !== undefined ? gpu.utilization : 0));
+            const memoryUsage = root.clampUsage(Number(gpu && gpu.memoryUsagePercent !== undefined ? gpu.memoryUsagePercent : 0));
+            const score = Math.max(utilization, memoryUsage);
+            if (score > selectedScore) {
+                selectedScore = score;
+                selectedIndex = i;
+            }
+        }
+        return selectedIndex;
+    }
+    readonly property var primaryGpu: root.primaryGpuIndex >= 0 && root.primaryGpuIndex < root.gpuTelemetry.length ? root.gpuTelemetry[root.primaryGpuIndex] : null
+    readonly property real gpuUsageValue: root.primaryGpu ? root.clampUsage(Number(root.primaryGpu.utilization || 0)) : 0
     readonly property var selectedDiskMounts: {
         let exactMatches = [];
         let fallback = [];
@@ -185,7 +216,7 @@ PluginComponent {
 
         return parts.join("  |  ");
     }
-    readonly property var validSectionKeys: ["cpu", "memory", "disk", "network"]
+    readonly property var validSectionKeys: ["cpu", "memory", "disk", "network", "gpu"]
     readonly property var enabledOrderedSectionKeys: {
         const configured = root.normalizedVisibleSectionKeys(root.configuredSectionSlots);
         if (configured.length > 0 || root.configuredSectionSlots.length > 0)
@@ -211,6 +242,11 @@ PluginComponent {
             enabled: root.showNetworkSection,
             order: root.networkSectionOrder,
             fallbackIndex: 3
+        }, {
+            key: "gpu",
+            enabled: root.showGpuSection,
+            order: root.gpuSectionOrder,
+            fallbackIndex: 4
         }];
 
         let enabled = sections.filter(section => section.enabled);
@@ -327,6 +363,111 @@ PluginComponent {
         return fallback;
     }
 
+    function nvidiaNumber(value, fallback = 0) {
+        if (value === undefined || value === null)
+            return fallback;
+
+        const text = String(value).trim();
+        if (text.length <= 0 || text === "N/A" || text === "[N/A]" || text === "[Not Supported]")
+            return fallback;
+
+        const parsed = Number(text);
+        return Number.isNaN(parsed) ? fallback : parsed;
+    }
+
+    function formatGpuMemory(mib) {
+        return root.formatStorage(root.nvidiaNumber(mib, 0) * 1024 * 1024);
+    }
+
+    function processInfoForPid(pid) {
+        const numericPid = Number(pid || 0);
+        if (numericPid <= 0 || !Array.isArray(DgopService.allProcesses))
+            return null;
+
+        for (let i = 0; i < DgopService.allProcesses.length; i++) {
+            const proc = DgopService.allProcesses[i];
+            if (Number(proc && proc.pid !== undefined ? proc.pid : 0) === numericPid)
+                return proc;
+        }
+
+        return null;
+    }
+
+    function gpuDisplayNameForProcess(proc) {
+        const processInfo = root.processInfoForPid(proc ? proc.pid : 0);
+        if (processInfo && processInfo.command)
+            return processInfo.command;
+
+        const rawName = String(proc && proc.processName ? proc.processName : "").trim();
+        if (rawName.length <= 0)
+            return "unknown";
+
+        const slashParts = rawName.split("/");
+        return slashParts[slashParts.length - 1] || rawName;
+    }
+
+    function refreshGpuTelemetry() {
+        if (!nvidiaGpuStatsProcess.running)
+            nvidiaGpuStatsProcess.running = true;
+        if (!nvidiaGpuAppsProcess.running)
+            nvidiaGpuAppsProcess.running = true;
+    }
+
+    function parseNvidiaGpuStats(text) {
+        const lines = String(text || "").split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+        let nextGpus = [];
+        for (let i = 0; i < lines.length; i++) {
+            const parts = lines[i].split(",").map(part => part.trim());
+            if (parts.length < 13)
+                continue;
+
+            const memoryUsedMiB = root.nvidiaNumber(parts[5], 0);
+            const memoryTotalMiB = root.nvidiaNumber(parts[6], 0);
+            const memoryUsagePercent = memoryTotalMiB > 0 ? root.clampUsage((memoryUsedMiB / memoryTotalMiB) * 100) : 0;
+            nextGpus.push({
+                "index": Math.max(0, Math.round(root.nvidiaNumber(parts[0], i))),
+                "uuid": parts[1],
+                "name": parts[2] || "NVIDIA GPU",
+                "temperature": root.nvidiaNumber(parts[3], 0),
+                "utilization": root.clampUsage(root.nvidiaNumber(parts[4], 0)),
+                "memoryUsedMiB": memoryUsedMiB,
+                "memoryTotalMiB": memoryTotalMiB,
+                "memoryUsagePercent": memoryUsagePercent,
+                "powerDrawWatts": root.nvidiaNumber(parts[7], 0),
+                "powerLimitWatts": root.nvidiaNumber(parts[8], 0),
+                "graphicsClockMHz": root.nvidiaNumber(parts[9], 0),
+                "memoryClockMHz": root.nvidiaNumber(parts[10], 0),
+                "encoderUtilization": root.clampUsage(root.nvidiaNumber(parts[11], 0)),
+                "decoderUtilization": root.clampUsage(root.nvidiaNumber(parts[12], 0))
+            });
+        }
+
+        root.gpuTelemetry = nextGpus;
+        root.nvidiaSmiAvailable = nextGpus.length > 0;
+    }
+
+    function parseNvidiaGpuApps(text) {
+        const lines = String(text || "").split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0 && line.indexOf("No running processes found") === -1);
+        let nextProcesses = [];
+        for (let i = 0; i < lines.length; i++) {
+            const parts = lines[i].split(",").map(part => part.trim());
+            if (parts.length < 4)
+                continue;
+
+            const gpuUuid = parts[0];
+            const gpu = root.gpuTelemetry.find(entry => entry.uuid === gpuUuid);
+            nextProcesses.push({
+                "gpuUuid": gpuUuid,
+                "gpuName": gpu ? gpu.name : "GPU",
+                "pid": Math.max(0, Math.round(root.nvidiaNumber(parts[1], 0))),
+                "processName": parts[2] || "",
+                "usedMemoryMiB": root.nvidiaNumber(parts[3], 0)
+            });
+        }
+
+        root.gpuProcesses = nextProcesses;
+    }
+
     function overallTextSize() {
         const fontScale = root.barConfig ? root.barConfig.fontScale : undefined;
         const maximizeText = root.barConfig ? root.barConfig.maximizeWidgetText : undefined;
@@ -364,6 +505,15 @@ PluginComponent {
         }
         nextDisk.length = diskCount;
         root.animatedDiskUsages = nextDisk;
+        let nextGpu = root.animatedGpuUsages ? root.animatedGpuUsages.slice() : [];
+        const gpuCount = root.gpuTelemetry.length;
+        for (let g = 0; g < gpuCount; g++) {
+            const gpuTarget = root.gpuUsageFor(g);
+            const gpuCurrent = Number(nextGpu[g]);
+            nextGpu[g] = root.syncUsageValue(gpuCurrent, gpuTarget, force);
+        }
+        nextGpu.length = gpuCount;
+        root.animatedGpuUsages = nextGpu;
     }
 
     function diskMountUsageFor(index) {
@@ -382,6 +532,14 @@ PluginComponent {
             return 0;
 
         return Math.max(0, Math.min(100, value));
+    }
+
+    function gpuUsageFor(index) {
+        if (index < 0 || index >= root.gpuTelemetry.length)
+            return 0;
+
+        const gpu = root.gpuTelemetry[index];
+        return root.clampUsage(root.nvidiaNumber(gpu && gpu.utilization !== undefined ? gpu.utilization : 0, 0));
     }
 
     function cpuRatioFor(index) {
@@ -417,6 +575,9 @@ PluginComponent {
     }
 
     function sectionIcon(sectionKey) {
+        if (sectionKey === "gpu")
+            return "developer_board";
+
         if (sectionKey === "memory")
             return "sd_card";
 
@@ -430,6 +591,9 @@ PluginComponent {
     }
 
     function sectionTitle(sectionKey) {
+        if (sectionKey === "gpu")
+            return "GPU";
+
         if (sectionKey === "memory")
             return "Memory";
 
@@ -466,6 +630,9 @@ PluginComponent {
         if (sectionKey === "cpu")
             return root.displayedCoreCount;
 
+        if (sectionKey === "gpu")
+            return Math.max(1, root.gpuTelemetry.length);
+
         if (sectionKey === "disk")
             return Math.max(1, root.selectedDiskMounts.length);
 
@@ -473,6 +640,9 @@ PluginComponent {
     }
 
     function sectionUsageFor(sectionKey, index) {
+        if (sectionKey === "gpu")
+            return root.gpuUsageFor(index);
+
         if (sectionKey === "memory")
             return root.memoryUsageValue;
 
@@ -486,6 +656,9 @@ PluginComponent {
     }
 
     function sectionAnimatedUsageFor(sectionKey, index) {
+        if (sectionKey === "gpu")
+            return Number(root.animatedGpuUsages[index]);
+
         if (sectionKey === "memory")
             return root.animatedMemoryUsage;
 
@@ -507,6 +680,9 @@ PluginComponent {
     }
 
     function sectionPercentageText(sectionKey) {
+        if (sectionKey === "gpu")
+            return root.primaryGpu ? root.gpuUsageValue.toFixed(0) + "%" : "—";
+
         if (sectionKey === "network")
             return root.formatCompactNetworkSpeed(root.currentDownloadRate) + " / " + root.formatCompactNetworkSpeed(root.currentUploadRate);
 
@@ -519,6 +695,9 @@ PluginComponent {
     function sectionColorFor(sectionKey, index) {
         if (sectionKey === "cpu")
             return root.colorFor(index);
+
+        if (sectionKey === "gpu")
+            return root.colorMode === "soft" ? root.softPalette[(index * 5 + 10) % root.softPalette.length] : root.vividPalette[(index * 5 + 13) % root.vividPalette.length];
 
         if (sectionKey === "memory")
             return root.colorMode === "soft" ? root.softPalette[11] : root.vividPalette[13];
@@ -622,6 +801,23 @@ PluginComponent {
     }
 
     function sectionSummarySubtitle(sectionKey) {
+        if (sectionKey === "gpu") {
+            if (!root.nvidiaSmiAvailable)
+                return "NVIDIA tools unavailable";
+
+            if (!root.primaryGpu)
+                return "Waiting for GPU stats";
+
+            let subtitle = root.primaryGpu.name + "  " + root.gpuUsageValue.toFixed(0) + "%";
+            if (root.primaryGpu.memoryTotalMiB > 0)
+                subtitle += "  |  " + root.formatGpuMemory(root.primaryGpu.memoryUsedMiB) + " / " + root.formatGpuMemory(root.primaryGpu.memoryTotalMiB);
+            if (root.primaryGpu.temperature > 0)
+                subtitle += "  |  " + Math.round(root.primaryGpu.temperature) + "°C";
+            if (root.gpuTelemetry.length > 1)
+                subtitle += "  |  " + root.gpuTelemetry.length + " GPUs";
+            return subtitle;
+        }
+
         if (sectionKey === "memory") {
             const total = Number(DgopService.totalMemoryKB || 0);
             if (total <= 0)
@@ -695,6 +891,8 @@ PluginComponent {
         let summary = "Memory " + root.memoryUsageValue.toFixed(0) + "%";
         summary += "  |  Disk " + root.diskUsageValue.toFixed(0) + "%";
         summary += "  |  Net " + root.formatCompactNetworkSpeed(root.currentDownloadRate) + " down / " + root.formatCompactNetworkSpeed(root.currentUploadRate) + " up";
+        if (root.primaryGpu)
+            summary += "  |  GPU " + root.gpuUsageValue.toFixed(0) + "%";
         summary += "  |  Hottest core C" + hottestIndex + " " + hottestUsage + "%";
         if (shownCores < totalCores)
             summary += "  |  Showing " + shownCores + "/" + totalCores + " cores";
@@ -711,6 +909,14 @@ PluginComponent {
         }
         if (root.diskUsageTooltipText.length > 0)
             lines.push("Disk mounts: " + root.diskUsageTooltipText);
+        if (root.primaryGpu) {
+            let gpuLine = root.primaryGpu.name + "  |  " + root.gpuUsageValue.toFixed(0) + "% util";
+            if (root.primaryGpu.memoryTotalMiB > 0)
+                gpuLine += "  |  VRAM " + root.formatGpuMemory(root.primaryGpu.memoryUsedMiB) + " / " + root.formatGpuMemory(root.primaryGpu.memoryTotalMiB);
+            if (root.primaryGpu.temperature > 0)
+                gpuLine += "  |  " + Math.round(root.primaryGpu.temperature) + "°C";
+            lines.push("GPU: " + gpuLine);
+        }
         lines.push("Network peaks (1m): down " + root.formatNetworkSpeed(root.peakDownloadRate) + "  |  up " + root.formatNetworkSpeed(root.peakUploadRate));
 
         return header + "\n" + summary + (lines.length > 0 ? "\n" + lines.join("\n") : "");
@@ -723,6 +929,8 @@ PluginComponent {
         let summary = "Total " + totalUsage + "%";
         summary += "  |  Hot core C" + hottestIndex + " " + hottestUsage + "%";
         summary += "  |  Net " + root.formatCompactNetworkSpeed(root.currentDownloadRate) + "/" + root.formatCompactNetworkSpeed(root.currentUploadRate);
+        if (root.primaryGpu)
+            summary += "  |  GPU " + root.gpuUsageValue.toFixed(0) + "%";
         if (DgopService.cpuTemperature > 0)
             summary += "  |  " + Math.round(DgopService.cpuTemperature) + "°C";
         return summary;
@@ -1039,6 +1247,10 @@ PluginComponent {
             if (!Array.isArray(series) || series.length <= 0)
                 return;
 
+            const inset = Math.min(Math.max(strokeWidth / 2, 0.5), Math.min(width, height) / 2);
+            const drawableWidth = Math.max(0, width - inset * 2);
+            const drawableHeight = Math.max(0, height - inset * 2);
+
             ctx.beginPath();
             ctx.lineWidth = strokeWidth;
             ctx.strokeStyle = strokeColor;
@@ -1046,9 +1258,9 @@ PluginComponent {
             ctx.lineCap = "round";
 
             for (let i = 0; i < series.length; i++) {
-                const x = series.length <= 1 ? width / 2 : (i / (series.length - 1)) * width;
+                const x = series.length <= 1 ? width / 2 : inset + (i / (series.length - 1)) * drawableWidth;
                 const ratio = Math.max(0, Math.min(1, Number(series[i] || 0) / Math.max(1, peak)));
-                const y = height - ratio * height;
+                const y = height - inset - ratio * drawableHeight;
                 if (i === 0)
                     ctx.moveTo(x, y);
                 else
@@ -1151,7 +1363,7 @@ PluginComponent {
 
             Rectangle {
                 width: root.networkChartWidth
-                height: Math.min(root.sectionContentThickness, Math.max(root.networkChartHeight, root.minBarHeight + 1))
+                height: Math.max(root.minBarHeight + 1, horizontalNetwork.height - 6)
                 anchors.verticalCenter: parent.verticalCenter
                 radius: Math.min(root.cornerRadius + 1, height / 2)
                 color: Theme.surfaceContainer
@@ -1159,7 +1371,6 @@ PluginComponent {
 
                 NetworkHistoryChart {
                     anchors.fill: parent
-                    anchors.margins: 1
                     downloadSeries: root.networkDownloadHistory
                     uploadSeries: root.networkUploadHistory
                     downloadPeak: root.peakDownloadRate
@@ -1273,14 +1484,13 @@ PluginComponent {
 
             Rectangle {
                 width: verticalNetwork.availableWidth
-                height: Math.max(root.networkChartHeight * 2, root.sectionContentThickness)
+                height: Math.max(root.sectionPillThickness * 2 - 2, verticalNetwork.availableWidth * 2)
                 radius: Math.min(root.cornerRadius + 1, height / 3)
                 color: Theme.surfaceContainer
                 clip: true
 
                 NetworkHistoryChart {
                     anchors.fill: parent
-                    anchors.margins: 1
                     downloadSeries: root.networkDownloadHistory
                     uploadSeries: root.networkUploadHistory
                     downloadPeak: root.peakDownloadRate
@@ -1380,7 +1590,7 @@ PluginComponent {
 
                     delegate: Item {
                         width: root.barWidth
-                        height: root.sectionContentThickness
+                        height: (horizontalSection.sectionKey === "cpu" || horizontalSection.sectionKey === "gpu") ? Math.max(root.minBarHeight + 1, horizontalSection.height - 8) : root.sectionContentThickness
 
                         Rectangle {
                             width: parent.width
@@ -1484,7 +1694,7 @@ PluginComponent {
             spacing: root.sectionPadding
 
             Column {
-                width: verticalSection.availableWidth
+                width: (verticalSection.sectionKey === "cpu" || verticalSection.sectionKey === "gpu") ? Math.max(root.minBarHeight + 1, verticalSection.width - 2) : verticalSection.availableWidth
                 spacing: root.barGap
 
                 Repeater {
@@ -1582,6 +1792,7 @@ PluginComponent {
         root.syncAnimatedUsage(true);
         root.appendNetworkHistorySample(root.currentDownloadRate, root.currentUploadRate);
         DgopService.updateAllStats();
+        root.refreshGpuTelemetry();
         root.queueNetworkHistoryCapture();
     }
     onBarConfigChanged: root.ensureTransparentHostPill()
@@ -1589,10 +1800,13 @@ PluginComponent {
         closePopoutTimer.stop();
         networkHistoryCaptureTimer.stop();
         DgopService.removeRef(["cpu", "memory", "diskmounts", "processes", "network"]);
+        nvidiaGpuStatsProcess.running = false;
+        nvidiaGpuAppsProcess.running = false;
     }
     onRawCoreUsageChanged: root.syncAnimatedUsage(root.animatedCpuUsage.length !== root.rawCoreUsage.length)
     onMemoryUsageValueChanged: root.syncAnimatedUsage(false)
     onSelectedDiskMountsChanged: root.syncAnimatedUsage(root.animatedDiskUsages.length !== root.selectedDiskMounts.length)
+    onGpuTelemetryChanged: root.syncAnimatedUsage(root.animatedGpuUsages.length !== root.gpuTelemetry.length)
     onEnabledOrderedSectionKeysChanged: {
         if (root.hoveredSection.length > 0 && !root.isSectionVisible(root.hoveredSection))
             root.hoveredSection = "";
@@ -1646,6 +1860,7 @@ PluginComponent {
         running: true
         onTriggered: {
             DgopService.updateAllStats();
+            root.refreshGpuTelemetry();
             root.queueNetworkHistoryCapture();
         }
     }
@@ -1668,6 +1883,38 @@ PluginComponent {
         repeat: true
         running: true
         onTriggered: root.syncAnimatedUsage(false)
+    }
+
+    Process {
+        id: nvidiaGpuStatsProcess
+
+        command: ["nvidia-smi", "--query-gpu=index,uuid,name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,power.limit,clocks.gr,clocks.mem,utilization.encoder,utilization.decoder", "--format=csv,noheader,nounits"]
+        running: false
+        onExited: exitCode => {
+            if (exitCode !== 0) {
+                root.nvidiaSmiAvailable = false;
+                root.gpuTelemetry = [];
+            }
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: root.parseNvidiaGpuStats(text)
+        }
+    }
+
+    Process {
+        id: nvidiaGpuAppsProcess
+
+        command: ["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,process_name,used_memory", "--format=csv,noheader,nounits"]
+        running: false
+        onExited: exitCode => {
+            if (exitCode !== 0)
+                root.gpuProcesses = [];
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: root.parseNvidiaGpuApps(text)
+        }
     }
 
     horizontalBarPill: Component {
@@ -1811,6 +2058,8 @@ PluginComponent {
                     return "Storage";
                 if (root.currentPopoutSection === "network")
                     return "Network";
+                if (root.currentPopoutSection === "gpu")
+                    return "GPU";
                 return "CPU";
             }
             detailsText: {
@@ -1832,6 +2081,13 @@ PluginComponent {
                     return root.diskSelectionLabel;
                 if (root.currentPopoutSection === "network")
                     return "";
+                if (root.currentPopoutSection === "gpu") {
+                    if (!root.nvidiaSmiAvailable)
+                        return "nvidia-smi unavailable";
+                    if (!root.primaryGpu)
+                        return "Waiting for GPU stats";
+                    return root.sectionSummarySubtitle("gpu");
+                }
                 if (root.defaultPopoutSection === "")
                     return "Enable at least one section to show data here";
                 return root.shortSummaryText();
@@ -2334,6 +2590,265 @@ PluginComponent {
 
                         }
 
+                    }
+
+                    // ── GPU view ─────────────────────────────────────────────
+                    Column {
+                        visible: root.currentPopoutSection === "gpu"
+                        width: parent.width
+                        spacing: Theme.spacingS
+
+                        Rectangle {
+                            width: parent.width
+                            height: root.nvidiaSmiAvailable ? 88 : 72
+                            radius: Theme.cornerRadius
+                            color: Theme.surfaceContainerHigh
+                            border.width: 1
+                            border.color: Theme.outline
+                            clip: true
+
+                            Rectangle {
+                                visible: root.primaryGpu != null
+                                anchors.top: parent.top
+                                anchors.left: parent.left
+                                width: parent.width * (root.gpuUsageValue / 100)
+                                height: parent.height
+                                radius: Theme.cornerRadius
+                                color: root.sectionColorFor("gpu", 0)
+                                opacity: root.fillOverlayOpacity
+
+                                Behavior on width {
+                                    NumberAnimation {
+                                        duration: root.animationDuration
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                            }
+
+                            Column {
+                                anchors.fill: parent
+                                anchors.margins: Theme.spacingM
+                                spacing: Theme.spacingXS
+
+                                StyledText {
+                                    width: parent.width
+                                    text: {
+                                        if (!root.nvidiaSmiAvailable)
+                                            return "nvidia-smi unavailable";
+                                        if (!root.primaryGpu)
+                                            return "Waiting for GPU stats";
+                                        return root.primaryGpu.name;
+                                    }
+                                    color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.weight: Font.Medium
+                                    elide: Text.ElideRight
+                                }
+
+                                StyledText {
+                                    width: parent.width
+                                    text: {
+                                        if (!root.nvidiaSmiAvailable)
+                                            return "Install NVIDIA drivers/tools to show GPU utilization, VRAM, power, and process data.";
+                                        if (!root.primaryGpu)
+                                            return "No NVIDIA GPU telemetry available yet.";
+
+                                        let line = root.gpuUsageValue.toFixed(0) + "% util";
+                                        if (root.primaryGpu.memoryTotalMiB > 0)
+                                            line += "  |  " + root.formatGpuMemory(root.primaryGpu.memoryUsedMiB) + " / " + root.formatGpuMemory(root.primaryGpu.memoryTotalMiB);
+                                        if (root.primaryGpu.temperature > 0)
+                                            line += "  |  " + Math.round(root.primaryGpu.temperature) + "°C";
+                                        if (root.primaryGpu.powerDrawWatts > 0)
+                                            line += "  |  " + root.primaryGpu.powerDrawWatts.toFixed(root.primaryGpu.powerDrawWatts >= 100 ? 0 : 1) + " W";
+                                        return line;
+                                    }
+                                    color: Theme.surfaceVariantText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                StyledText {
+                                    visible: root.primaryGpu != null
+                                    width: parent.width
+                                    text: {
+                                        if (!root.primaryGpu)
+                                            return "";
+
+                                        let parts = [];
+                                        if (root.primaryGpu.graphicsClockMHz > 0)
+                                            parts.push(Math.round(root.primaryGpu.graphicsClockMHz) + " MHz gfx");
+                                        if (root.primaryGpu.memoryClockMHz > 0)
+                                            parts.push(Math.round(root.primaryGpu.memoryClockMHz) + " MHz mem");
+                                        parts.push(root.primaryGpu.encoderUtilization.toFixed(0) + "% enc");
+                                        parts.push(root.primaryGpu.decoderUtilization.toFixed(0) + "% dec");
+                                        if (root.gpuTelemetry.length > 1)
+                                            parts.push(root.gpuTelemetry.length + " GPUs");
+                                        return parts.join("  |  ");
+                                    }
+                                    color: Theme.surfaceVariantText
+                                    font.pixelSize: Theme.fontSizeSmall - 1
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: root.gpuTelemetry
+
+                            delegate: Rectangle {
+                                visible: root.gpuTelemetry.length > 1
+                                width: parent.width
+                                height: 72
+                                radius: Theme.cornerRadius
+                                color: Theme.surfaceContainerHigh
+                                border.width: 1
+                                border.color: Theme.outline
+                                clip: true
+
+                                Rectangle {
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    width: parent.width * (root.clampUsage(Number(modelData.utilization || 0)) / 100)
+                                    height: parent.height
+                                    radius: Theme.cornerRadius
+                                    color: root.sectionColorFor("gpu", index)
+                                    opacity: root.fillOverlayOpacity
+
+                                    Behavior on width {
+                                        NumberAnimation {
+                                            duration: root.animationDuration
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
+                                }
+
+                                StyledText {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingM
+                                    anchors.top: parent.top
+                                    anchors.topMargin: Theme.spacingS
+                                    anchors.right: gpuCardUsageText.left
+                                    anchors.rightMargin: Theme.spacingS
+                                    text: modelData.name || ("GPU " + index)
+                                    color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: Font.Medium
+                                    elide: Text.ElideRight
+                                }
+
+                                StyledText {
+                                    id: gpuCardUsageText
+
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: Theme.spacingM
+                                    anchors.top: parent.top
+                                    anchors.topMargin: Theme.spacingS
+                                    text: root.clampUsage(Number(modelData.utilization || 0)).toFixed(0) + "%"
+                                    color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: Font.Bold
+                                }
+
+                                StyledText {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingM
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: Theme.spacingS
+                                    anchors.right: parent.right
+                                    text: root.formatGpuMemory(modelData.memoryUsedMiB) + " / " + root.formatGpuMemory(modelData.memoryTotalMiB) + "  |  " + Math.round(Number(modelData.temperature || 0)) + "°C  |  " + Number(modelData.powerDrawWatts || 0).toFixed(Number(modelData.powerDrawWatts || 0) >= 100 ? 0 : 1) + " W"
+                                    color: Theme.surfaceVariantText
+                                    font.pixelSize: Theme.fontSizeSmall - 1
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+
+                        StyledText {
+                            width: parent.width
+                            text: "Top GPU processes"
+                            color: Theme.surfaceText
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.weight: Font.Bold
+                            visible: root.nvidiaSmiAvailable
+                        }
+
+                        StyledText {
+                            width: parent.width
+                            visible: root.nvidiaSmiAvailable && root.topGpuProcesses.length <= 0
+                            text: "No active GPU processes reported right now."
+                            color: Theme.surfaceVariantText
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+
+                        Repeater {
+                            model: root.topGpuProcesses
+
+                            delegate: Rectangle {
+                                width: parent.width
+                                height: 60
+                                radius: Theme.cornerRadius
+                                color: Theme.surfaceContainerHigh
+                                border.width: 1
+                                border.color: Theme.outline
+                                clip: true
+
+                                Rectangle {
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    width: parent.width * Math.min(1, (Number(modelData.usedMemoryMiB) || 0) / Math.max(1, root.primaryGpu ? Number(root.primaryGpu.memoryTotalMiB || 0) : Number(modelData.usedMemoryMiB || 1)))
+                                    height: parent.height
+                                    radius: Theme.cornerRadius
+                                    color: root.sectionColorFor("gpu", index)
+                                    opacity: root.fillOverlayOpacity
+
+                                    Behavior on width {
+                                        NumberAnimation {
+                                            duration: root.animationDuration
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
+                                }
+
+                                StyledText {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingM
+                                    anchors.top: parent.top
+                                    anchors.topMargin: Theme.spacingS
+                                    anchors.right: gpuProcMemoryText.left
+                                    anchors.rightMargin: Theme.spacingS
+                                    text: root.gpuDisplayNameForProcess(modelData)
+                                    color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: Font.Medium
+                                    elide: Text.ElideRight
+                                }
+
+                                StyledText {
+                                    id: gpuProcMemoryText
+
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: Theme.spacingM
+                                    anchors.top: parent.top
+                                    anchors.topMargin: Theme.spacingS
+                                    text: root.formatGpuMemory(modelData.usedMemoryMiB)
+                                    color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: Font.Bold
+                                }
+
+                                StyledText {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingM
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: Theme.spacingS
+                                    anchors.right: parent.right
+                                    text: modelData.gpuName + "  |  pid " + (modelData.pid || "—") + (root.processInfoForPid(modelData.pid) ? "  |  " + (Number(root.processInfoForPid(modelData.pid).cpu) || 0).toFixed(1) + "% cpu" : "")
+                                    color: Theme.surfaceVariantText
+                                    font.pixelSize: Theme.fontSizeSmall - 1
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
                     }
 
                     // ── Disk view ────────────────────────────────────────────
