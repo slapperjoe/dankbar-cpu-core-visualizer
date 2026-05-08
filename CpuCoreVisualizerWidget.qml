@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pipewire
 import qs.Common
@@ -59,6 +60,12 @@ PluginComponent {
     property bool detailsPopoutOpen: false
     property string pendingDeferredPopoutSection: ""
     property string hoveredSection: ""
+    property string memoryProcessSearchText: ""
+    property string memoryProcessFilter: "all"
+    property string memoryExpandedPid: ""
+    property string fallbackProcessSortKey: "memory"
+    property bool fallbackProcessSortAscending: false
+    property var cachedMemoryProcesses: []
     property var animatedCpuUsage: []
     property real animatedMemoryUsage: 0
     property var animatedDiskUsages: []
@@ -77,6 +84,16 @@ PluginComponent {
     readonly property real currentUploadRate: Math.max(0, Number(DgopService.networkTxRate || 0))
     readonly property real peakDownloadRate: root.networkPeak(root.networkDownloadHistory, root.currentDownloadRate)
     readonly property real peakUploadRate: root.networkPeak(root.networkUploadHistory, root.currentUploadRate)
+    readonly property int processCpuColumnWidth: 86
+    readonly property int processMemoryColumnWidth: 96
+    readonly property int processPidColumnWidth: 74
+    readonly property int processExpandColumnWidth: 34
+    readonly property string processSortKey: {
+        const sortKey = String(DgopService.currentSort || root.fallbackProcessSortKey);
+        return ["name", "cpu", "memory", "pid"].indexOf(sortKey) !== -1 ? sortKey : root.fallbackProcessSortKey;
+    }
+    readonly property bool processSortAscending: DgopService.sortAscending !== undefined ? Boolean(DgopService.sortAscending) : root.fallbackProcessSortAscending
+    readonly property bool pauseMemoryProcessUpdates: root.memoryExpandedPid.length > 0
     readonly property string activeNetworkIp: {
         if (DgopService.wifiConnected && DgopService.wifiIP)
             return DgopService.wifiIP;
@@ -99,6 +116,71 @@ PluginComponent {
         procs.sort((a, b) => (Number(b.memoryKB) || 0) - (Number(a.memoryKB) || 0));
         return procs.slice(0, 8);
     }
+    readonly property var filteredMemoryProcesses: {
+        if (!Array.isArray(DgopService.allProcesses) || DgopService.allProcesses.length <= 0)
+            return [];
+
+        let procs = DgopService.allProcesses.slice();
+        const currentUser = String(UserInfoService.username || "");
+        if (root.memoryProcessFilter === "user" && currentUser.length > 0)
+            procs = procs.filter(proc => String(proc && proc.username ? proc.username : "") === currentUser);
+        else if (root.memoryProcessFilter === "system" && currentUser.length > 0)
+            procs = procs.filter(proc => String(proc && proc.username ? proc.username : "") !== currentUser);
+
+        const search = root.memoryProcessSearchText.trim().toLowerCase();
+        if (search.length > 0) {
+            procs = procs.filter(proc => {
+                const command = root.processCommand(proc).toLowerCase();
+                const fullCommand = root.processFullCommand(proc).toLowerCase();
+                const pid = String(proc && proc.pid !== undefined ? proc.pid : "");
+                const username = String(proc && proc.username ? proc.username : "").toLowerCase();
+                return command.indexOf(search) !== -1 || fullCommand.indexOf(search) !== -1 || pid.indexOf(search) !== -1 || username.indexOf(search) !== -1;
+            });
+        }
+
+        const asc = root.processSortAscending;
+        procs.sort((left, right) => {
+            let valueLeft;
+            let valueRight;
+            let result = 0;
+            switch (root.processSortKey) {
+            case "cpu":
+                valueLeft = Number(left && left.cpu !== undefined ? left.cpu : 0);
+                valueRight = Number(right && right.cpu !== undefined ? right.cpu : 0);
+                result = valueRight - valueLeft;
+                break;
+            case "memory":
+                valueLeft = Number(left && left.memoryKB !== undefined ? left.memoryKB : 0);
+                valueRight = Number(right && right.memoryKB !== undefined ? right.memoryKB : 0);
+                result = valueRight - valueLeft;
+                break;
+            case "pid":
+                valueLeft = Number(left && left.pid !== undefined ? left.pid : 0);
+                valueRight = Number(right && right.pid !== undefined ? right.pid : 0);
+                result = valueLeft - valueRight;
+                break;
+            default:
+                valueLeft = root.processCommand(left).toLowerCase();
+                valueRight = root.processCommand(right).toLowerCase();
+                result = valueLeft.localeCompare(valueRight);
+                break;
+            }
+            return asc ? -result : result;
+        });
+        return procs;
+    }
+    onFilteredMemoryProcessesChanged: {
+        if (!root.pauseMemoryProcessUpdates)
+            root.cachedMemoryProcesses = root.filteredMemoryProcesses;
+    }
+    onPauseMemoryProcessUpdatesChanged: {
+        if (!root.pauseMemoryProcessUpdates)
+            root.cachedMemoryProcesses = root.filteredMemoryProcesses;
+    }
+    onMemoryProcessSearchTextChanged: root.cachedMemoryProcesses = root.filteredMemoryProcesses
+    onMemoryProcessFilterChanged: root.cachedMemoryProcesses = root.filteredMemoryProcesses
+    onProcessSortKeyChanged: root.cachedMemoryProcesses = root.filteredMemoryProcesses
+    onProcessSortAscendingChanged: root.cachedMemoryProcesses = root.filteredMemoryProcesses
     readonly property var topGpuProcesses: {
         const procs = Array.isArray(root.gpuProcesses) ? root.gpuProcesses.slice() : [];
         procs.sort((a, b) => (Number(b.usedMemoryMiB) || 0) - (Number(a.usedMemoryMiB) || 0));
@@ -404,6 +486,42 @@ PluginComponent {
 
         const slashParts = rawName.split("/");
         return slashParts[slashParts.length - 1] || rawName;
+    }
+
+    function processCommand(proc) {
+        const command = String(proc && proc.command ? proc.command : "").trim();
+        if (command.length > 0)
+            return command;
+
+        const fullCommand = root.processFullCommand(proc);
+        if (fullCommand.length <= 0)
+            return "unknown";
+
+        const firstToken = fullCommand.split(/\s+/)[0] || fullCommand;
+        const slashParts = firstToken.split("/");
+        return slashParts[slashParts.length - 1] || firstToken;
+    }
+
+    function processFullCommand(proc) {
+        return String(proc && (proc.fullCommand || proc.command) ? (proc.fullCommand || proc.command) : "").trim();
+    }
+
+    function processNameColumnWidth(totalWidth) {
+        return Math.max(150, totalWidth - root.processCpuColumnWidth - root.processMemoryColumnWidth - root.processPidColumnWidth - root.processExpandColumnWidth - Theme.spacingS * 2);
+    }
+
+    function toggleProcessSort(sortKey) {
+        if (DgopService && DgopService.toggleSort) {
+            DgopService.toggleSort(sortKey);
+            return;
+        }
+
+        if (root.fallbackProcessSortKey === sortKey)
+            root.fallbackProcessSortAscending = !root.fallbackProcessSortAscending;
+        else {
+            root.fallbackProcessSortKey = sortKey;
+            root.fallbackProcessSortAscending = false;
+        }
     }
 
     function refreshGpuTelemetry() {
@@ -1190,6 +1308,352 @@ PluginComponent {
             root.activePopoutSection = "";
     }
 
+    component ProcessSortHeader: Item {
+        id: processHeader
+
+        property string text: ""
+        property string sortKey: ""
+        property int alignment: Text.AlignHCenter
+
+        readonly property bool active: sortKey === root.processSortKey
+
+        height: 34
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: Theme.cornerRadius
+            color: processHeader.active ? Qt.rgba(Theme.primary.r, Theme.primary.g, Theme.primary.b, 0.12) : (processHeaderMouse.containsMouse ? Qt.rgba(Theme.surfaceText.r, Theme.surfaceText.g, Theme.surfaceText.b, 0.06) : "transparent")
+            border.width: processHeader.active ? 1 : 0
+            border.color: processHeader.active ? Qt.rgba(Theme.primary.r, Theme.primary.g, Theme.primary.b, 0.28) : "transparent"
+        }
+
+        Row {
+            visible: processHeader.alignment === Text.AlignLeft
+            anchors.left: parent.left
+            anchors.leftMargin: Theme.spacingS
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 4
+
+            StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                text: processHeader.text
+                font.pixelSize: Theme.fontSizeSmall
+                font.weight: processHeader.active ? Font.Bold : Font.Medium
+                color: processHeader.active ? Theme.primary : Theme.surfaceText
+                elide: Text.ElideRight
+            }
+
+            DankIcon {
+                id: sortArrow
+
+                anchors.verticalCenter: parent.verticalCenter
+                name: root.processSortAscending ? "arrow_upward" : "arrow_downward"
+                size: Math.max(12, Theme.fontSizeSmall)
+                color: Theme.primary
+                visible: processHeader.active
+            }
+        }
+
+        Row {
+            visible: processHeader.alignment !== Text.AlignLeft
+            anchors.centerIn: parent
+            spacing: 4
+
+            StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                text: processHeader.text
+                font.pixelSize: Theme.fontSizeSmall
+                font.weight: processHeader.active ? Font.Bold : Font.Medium
+                color: processHeader.active ? Theme.primary : Theme.surfaceText
+                elide: Text.ElideRight
+            }
+
+            DankIcon {
+                anchors.verticalCenter: parent.verticalCenter
+                name: root.processSortAscending ? "arrow_upward" : "arrow_downward"
+                size: Math.max(12, Theme.fontSizeSmall)
+                color: Theme.primary
+                visible: processHeader.active
+            }
+        }
+
+        MouseArea {
+            id: processHeaderMouse
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.toggleProcessSort(processHeader.sortKey)
+        }
+    }
+
+    component MemoryProcessRow: Rectangle {
+        id: processRow
+
+        property var processData: null
+
+        readonly property int processPid: Number(processData && processData.pid !== undefined ? processData.pid : 0)
+        readonly property real processCpu: Number(processData && processData.cpu !== undefined ? processData.cpu : 0)
+        readonly property int processMemKB: Number(processData && processData.memoryKB !== undefined ? processData.memoryKB : 0)
+        readonly property real processMemPercent: Number(processData && processData.memoryPercent !== undefined ? processData.memoryPercent : 0)
+        readonly property string processCmd: root.processCommand(processData)
+        readonly property string processFullCmd: root.processFullCommand(processData)
+        readonly property string processUser: String(processData && processData.username ? processData.username : "")
+        readonly property int processPpid: Number(processData && processData.ppid !== undefined ? processData.ppid : 0)
+        readonly property bool expanded: root.memoryExpandedPid === processPid.toString()
+
+        height: expanded ? (44 + expandedBody.implicitHeight + Theme.spacingXS) : 44
+        radius: Theme.cornerRadius
+        color: processRowMouse.containsMouse ? Qt.rgba(Theme.primary.r, Theme.primary.g, Theme.primary.b, 0.06) : "transparent"
+        border.width: 1
+        border.color: processRowMouse.containsMouse || expanded ? Qt.rgba(Theme.primary.r, Theme.primary.g, Theme.primary.b, expanded ? 0.3 : 0.12) : "transparent"
+        clip: true
+
+        Behavior on height {
+            NumberAnimation {
+                duration: Theme.shortDuration
+                easing.type: Theme.standardEasing
+            }
+        }
+
+        MouseArea {
+            id: processRowMouse
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                const pid = processRow.processPid > 0 ? processRow.processPid.toString() : "";
+                root.memoryExpandedPid = root.memoryExpandedPid === pid ? "" : pid;
+            }
+        }
+
+        Column {
+            anchors.fill: parent
+            spacing: 0
+
+            Item {
+                width: parent.width
+                height: 44
+
+                Row {
+                    anchors.fill: parent
+                    anchors.leftMargin: Theme.spacingS
+                    anchors.rightMargin: Theme.spacingS
+                    spacing: 0
+
+                    Item {
+                        width: root.processNameColumnWidth(parent.width)
+                        height: parent.height
+
+                        Row {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: Theme.spacingS
+
+                            DankIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                name: DgopService.getProcessIcon(processRow.processCmd)
+                                size: Theme.iconSize - 4
+                                color: {
+                                    if (processRow.processCpu > 80)
+                                        return Theme.error;
+                                    if (processRow.processCpu > 50)
+                                        return Theme.warning;
+                                    return Theme.surfaceText;
+                                }
+                                opacity: 0.85
+                            }
+
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - Theme.iconSize - Theme.spacingS
+                                text: processRow.processCmd
+                                color: Theme.surfaceText
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.weight: Font.Medium
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+
+                    Item {
+                        width: root.processCpuColumnWidth
+                        height: parent.height
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 62
+                            height: 24
+                            radius: Theme.cornerRadius
+                            color: {
+                                if (processRow.processCpu > 80)
+                                    return Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.15);
+                                if (processRow.processCpu > 50)
+                                    return Qt.rgba(Theme.warning.r, Theme.warning.g, Theme.warning.b, 0.12);
+                                return Qt.rgba(Theme.surfaceText.r, Theme.surfaceText.g, Theme.surfaceText.b, 0.06);
+                            }
+
+                            StyledText {
+                                anchors.centerIn: parent
+                                text: processRow.processCpu.toFixed(1) + "%"
+                                color: {
+                                    if (processRow.processCpu > 80)
+                                        return Theme.error;
+                                    if (processRow.processCpu > 50)
+                                        return Theme.warning;
+                                    return Theme.surfaceText;
+                                }
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.weight: Font.Bold
+                            }
+                        }
+                    }
+
+                    Item {
+                        width: root.processMemoryColumnWidth
+                        height: parent.height
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 74
+                            height: 24
+                            radius: Theme.cornerRadius
+                            color: {
+                                if (processRow.processMemKB > 2 * 1024 * 1024)
+                                    return Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.15);
+                                if (processRow.processMemKB > 1024 * 1024)
+                                    return Qt.rgba(Theme.warning.r, Theme.warning.g, Theme.warning.b, 0.12);
+                                return Qt.rgba(Theme.surfaceText.r, Theme.surfaceText.g, Theme.surfaceText.b, 0.06);
+                            }
+
+                            StyledText {
+                                anchors.centerIn: parent
+                                text: root.formatStorage(processRow.processMemKB * 1024)
+                                color: {
+                                    if (processRow.processMemKB > 2 * 1024 * 1024)
+                                        return Theme.error;
+                                    if (processRow.processMemKB > 1024 * 1024)
+                                        return Theme.warning;
+                                    return Theme.surfaceText;
+                                }
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.weight: Font.Bold
+                            }
+                        }
+                    }
+
+                    Item {
+                        width: root.processPidColumnWidth
+                        height: parent.height
+
+                        StyledText {
+                            anchors.centerIn: parent
+                            text: processRow.processPid > 0 ? processRow.processPid.toString() : ""
+                            color: Theme.surfaceVariantText
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+                    }
+
+                    Item {
+                        width: root.processExpandColumnWidth
+                        height: parent.height
+
+                        DankIcon {
+                            anchors.centerIn: parent
+                            name: processRow.expanded ? "expand_less" : "expand_more"
+                            size: Theme.iconSize - 4
+                            color: Theme.surfaceVariantText
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: parent.width - Theme.spacingM * 2
+                anchors.horizontalCenter: parent.horizontalCenter
+                height: processRow.expanded ? (expandedBody.implicitHeight + Theme.spacingS * 2) : 0
+                radius: Math.max(0, Theme.cornerRadius - 2)
+                color: Qt.rgba(Theme.surfaceContainerHigh.r, Theme.surfaceContainerHigh.g, Theme.surfaceContainerHigh.b, 0.7)
+                clip: true
+                visible: processRow.expanded
+
+                Behavior on height {
+                    NumberAnimation {
+                        duration: Theme.shortDuration
+                        easing.type: Theme.standardEasing
+                    }
+                }
+
+                Column {
+                    id: expandedBody
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: Theme.spacingS
+                    spacing: Theme.spacingXS
+
+                    Row {
+                        width: parent.width
+                        spacing: Theme.spacingS
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - copyCommandButton.width - Theme.spacingS
+                            text: processRow.processFullCmd.length > 0 ? processRow.processFullCmd : processRow.processCmd
+                            color: Theme.surfaceText
+                            font.pixelSize: Theme.fontSizeSmall
+                            elide: Text.ElideMiddle
+                            wrapMode: Text.NoWrap
+                        }
+
+                        Rectangle {
+                            id: copyCommandButton
+
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 24
+                            height: 24
+                            radius: Math.max(0, Theme.cornerRadius - 2)
+                            color: copyCommandMouse.containsMouse ? Qt.rgba(Theme.primary.r, Theme.primary.g, Theme.primary.b, 0.15) : "transparent"
+
+                            DankIcon {
+                                anchors.centerIn: parent
+                                name: "content_copy"
+                                size: 14
+                                color: copyCommandMouse.containsMouse ? Theme.primary : Theme.surfaceVariantText
+                            }
+
+                            MouseArea {
+                                id: copyCommandMouse
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    const fullCommand = processRow.processFullCmd.length > 0 ? processRow.processFullCmd : processRow.processCmd;
+                                    if (fullCommand.length > 0)
+                                        Quickshell.execDetached(["dms", "cl", "copy", fullCommand]);
+                                }
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        width: parent.width
+                        text: "user " + (processRow.processUser.length > 0 ? processRow.processUser : "unknown") + "  |  pid " + (processRow.processPid > 0 ? processRow.processPid : "—") + "  |  ppid " + (processRow.processPpid > 0 ? processRow.processPpid : "—") + "  |  " + processRow.processMemPercent.toFixed(1) + "% mem  |  " + processRow.processCpu.toFixed(1) + "% cpu"
+                        color: Theme.surfaceVariantText
+                        font.pixelSize: Theme.fontSizeSmall - 1
+                        elide: Text.ElideRight
+                        wrapMode: Text.NoWrap
+                    }
+                }
+            }
+        }
+    }
+
     function refreshBarsForLayoutChange() {
         root.syncAnimatedUsage(true);
         Qt.callLater(function() {
@@ -1789,6 +2253,7 @@ PluginComponent {
     Component.onCompleted: {
         root.ensureTransparentHostPill();
         DgopService.addRef(["cpu", "memory", "diskmounts", "processes", "network"]);
+        root.cachedMemoryProcesses = root.filteredMemoryProcesses;
         root.syncAnimatedUsage(true);
         root.appendNetworkHistorySample(root.currentDownloadRate, root.currentUploadRate);
         DgopService.updateAllStats();
@@ -2097,8 +2562,13 @@ PluginComponent {
             Connections {
                 function onShouldBeVisibleChanged() {
                     root.detailsPopoutOpen = sectionPopout.shouldBeVisible;
-                    if (!root.detailsPopoutOpen)
+                    if (!root.detailsPopoutOpen) {
                         root.popoutHovered = false;
+                        root.memoryProcessSearchText = "";
+                        root.memoryProcessFilter = "all";
+                        root.memoryExpandedPid = "";
+                        root.cachedMemoryProcesses = root.filteredMemoryProcesses;
+                    }
 
                 }
 
@@ -2499,95 +2969,273 @@ PluginComponent {
 
                         }
 
-                        StyledText {
+                        Item {
                             width: parent.width
-                            text: "Top processes by memory"
-                            color: Theme.surfaceText
-                            font.pixelSize: Theme.fontSizeSmall
-                            font.weight: Font.Bold
-                            visible: root.topMemoryProcesses.length > 0
-                        }
+                            height: 34
 
-                        Repeater {
-                            model: root.topMemoryProcesses
+                            Row {
+                                id: memoryFilterRow
 
-                            delegate: Rectangle {
-                                width: parent.width
-                                height: 52
-                                radius: Theme.cornerRadius
-                                color: Theme.surfaceContainerHigh
-                                border.width: 1
-                                border.color: Theme.outline
-                                clip: true
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Theme.spacingS
 
                                 Rectangle {
-                                    anchors.top: parent.top
-                                    anchors.left: parent.left
-                                    width: parent.width * Math.min(1, (Number(modelData.memoryPercent) || 0) / 100)
-                                    height: parent.height
-                                    radius: Theme.cornerRadius
-                                    color: root.sectionColorFor("memory", 0)
-                                    opacity: root.fillOverlayOpacity
+                                    width: 42
+                                    height: 30
+                                    radius: 15
+                                    color: root.memoryProcessFilter === "all" ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+                                    border.width: 1
+                                    border.color: root.memoryProcessFilter === "all" ? Theme.primary : Theme.outline
 
-                                    Behavior on width {
-                                        NumberAnimation {
-                                            duration: root.animationDuration
-                                            easing.type: Easing.OutCubic
-                                        }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.memoryProcessFilter = "all"
+                                    }
 
+                                    StyledText {
+                                        anchors.centerIn: parent
+                                        text: "All"
+                                        color: Theme.surfaceText
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        font.weight: root.memoryProcessFilter === "all" ? Font.Medium : Font.Normal
                                     }
                                 }
 
                                 Rectangle {
-                                    width: 8
-                                    height: 8
-                                    radius: 4
-                                    color: Theme.widgetTextColor
+                                    width: 48
+                                    height: 30
+                                    radius: 15
+                                    color: root.memoryProcessFilter === "user" ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+                                    border.width: 1
+                                    border.color: root.memoryProcessFilter === "user" ? Theme.primary : Theme.outline
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.memoryProcessFilter = "user"
+                                    }
+
+                                    StyledText {
+                                        anchors.centerIn: parent
+                                        text: "User"
+                                        color: Theme.surfaceText
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        font.weight: root.memoryProcessFilter === "user" ? Font.Medium : Font.Normal
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: 62
+                                    height: 30
+                                    radius: 15
+                                    color: root.memoryProcessFilter === "system" ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+                                    border.width: 1
+                                    border.color: root.memoryProcessFilter === "system" ? Theme.primary : Theme.outline
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.memoryProcessFilter = "system"
+                                    }
+
+                                    StyledText {
+                                        anchors.centerIn: parent
+                                        text: "System"
+                                        color: Theme.surfaceText
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        font.weight: root.memoryProcessFilter === "system" ? Font.Medium : Font.Normal
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.left: memoryFilterRow.right
+                                anchors.leftMargin: Theme.spacingS
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                height: 32
+                                radius: 16
+                                color: Theme.surfaceContainerHigh
+                                border.width: 1
+                                border.color: memorySearchInput.activeFocus ? Theme.primary : Theme.outline
+
+                                DankIcon {
                                     anchors.left: parent.left
-                                    anchors.leftMargin: Theme.spacingM
-                                    anchors.top: parent.top
-                                    anchors.topMargin: Theme.spacingM
+                                    anchors.leftMargin: Theme.spacingS
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    name: "search"
+                                    size: Theme.iconSize - 4
+                                    color: Theme.surfaceVariantText
+                                }
+
+                                TextInput {
+                                    id: memorySearchInput
+
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingS * 2 + Theme.iconSize - 4
+                                    anchors.right: memorySearchClearButton.left
+                                    anchors.rightMargin: Theme.spacingXS
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    color: Theme.surfaceText
+                                    selectionColor: Theme.primaryHoverLight
+                                    selectedTextColor: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    clip: true
+                                    text: root.memoryProcessSearchText
+                                    onTextEdited: root.memoryProcessSearchText = text
+                                }
+
+                                Connections {
+                                    target: root
+
+                                    function onMemoryProcessSearchTextChanged() {
+                                        if (memorySearchInput.text !== root.memoryProcessSearchText)
+                                            memorySearchInput.text = root.memoryProcessSearchText;
+                                    }
                                 }
 
                                 StyledText {
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: Theme.spacingM + 14
-                                    anchors.right: memProcMemText.left
-                                    anchors.rightMargin: Theme.spacingS
-                                    anchors.top: parent.top
-                                    anchors.topMargin: Theme.spacingS
-                                    text: modelData.command || "unknown"
-                                    color: Theme.surfaceText
+                                    anchors.left: memorySearchInput.left
+                                    anchors.right: memorySearchInput.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "Search processes, users, or PID"
+                                    color: Theme.surfaceVariantText
                                     font.pixelSize: Theme.fontSizeSmall
-                                    font.weight: Font.Medium
+                                    visible: memorySearchInput.text.length <= 0
                                     elide: Text.ElideRight
                                 }
 
-                                StyledText {
-                                    id: memProcMemText
+                                Rectangle {
+                                    id: memorySearchClearButton
 
                                     anchors.right: parent.right
-                                    anchors.rightMargin: Theme.spacingM
-                                    anchors.top: parent.top
-                                    anchors.topMargin: Theme.spacingS
-                                    text: root.formatStorage(Number(modelData.memoryKB) * 1024)
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeSmall
-                                    font.weight: Font.Bold
+                                    anchors.rightMargin: 4
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 24
+                                    height: 24
+                                    radius: 12
+                                    color: memorySearchClearArea.containsMouse ? Theme.primaryHoverLight : "transparent"
+                                    visible: memorySearchInput.text.length > 0
+
+                                    MouseArea {
+                                        id: memorySearchClearArea
+
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: memorySearchInput.text = ""
+                                    }
+
+                                    DankIcon {
+                                        anchors.centerIn: parent
+                                        name: "close"
+                                        size: 14
+                                        color: Theme.surfaceVariantText
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: 36
+                            radius: Theme.cornerRadius
+                            color: Theme.surfaceContainerHigh
+                            border.width: 1
+                            border.color: Theme.outline
+
+                            Row {
+                                anchors.fill: parent
+                                anchors.leftMargin: Theme.spacingXS
+                                anchors.rightMargin: Theme.spacingXS
+                                spacing: 0
+
+                                ProcessSortHeader {
+                                    width: root.processNameColumnWidth(parent.width)
+                                    height: parent.height
+                                    text: "Name"
+                                    sortKey: "name"
+                                    alignment: Text.AlignLeft
+                                }
+
+                                ProcessSortHeader {
+                                    width: root.processCpuColumnWidth
+                                    height: parent.height
+                                    text: "CPU"
+                                    sortKey: "cpu"
+                                }
+
+                                ProcessSortHeader {
+                                    width: root.processMemoryColumnWidth
+                                    height: parent.height
+                                    text: "Memory"
+                                    sortKey: "memory"
+                                }
+
+                                ProcessSortHeader {
+                                    width: root.processPidColumnWidth
+                                    height: parent.height
+                                    text: "PID"
+                                    sortKey: "pid"
+                                }
+
+                                Item {
+                                    width: root.processExpandColumnWidth
+                                    height: parent.height
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: 340
+                            radius: Theme.cornerRadius
+                            color: "transparent"
+                            border.width: 1
+                            border.color: Theme.outline
+                            clip: true
+
+                            ListView {
+                                id: memoryProcessList
+
+                                anchors.fill: parent
+                                anchors.margins: 4
+                                clip: true
+                                spacing: 2
+                                model: root.cachedMemoryProcesses
+
+                                delegate: MemoryProcessRow {
+                                    required property var modelData
+
+                                    width: memoryProcessList.width
+                                    processData: modelData
+                                }
+                            }
+
+                            Column {
+                                anchors.centerIn: parent
+                                spacing: Theme.spacingS
+                                visible: root.cachedMemoryProcesses.length <= 0
+
+                                DankIcon {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    name: root.memoryProcessSearchText.length > 0 ? "search_off" : "hourglass_empty"
+                                    size: 28
+                                    color: Theme.surfaceVariantText
                                 }
 
                                 StyledText {
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: Theme.spacingM
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: Theme.spacingS
-                                    text: (Number(modelData.memoryPercent) || 0).toFixed(1) + "% mem  |  " + (Number(modelData.cpu) || 0).toFixed(1) + "% cpu  |  pid " + (modelData.pid || "—")
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: root.memoryProcessSearchText.length > 0 ? "No matching processes" : "Waiting for process stats"
                                     color: Theme.surfaceVariantText
-                                    font.pixelSize: Theme.fontSizeSmall - 1
+                                    font.pixelSize: Theme.fontSizeSmall
                                 }
-
                             }
-
                         }
 
                     }
