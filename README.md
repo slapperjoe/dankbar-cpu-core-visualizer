@@ -43,7 +43,7 @@ To install somewhere else, use:
 - top/bottom bars are the best-looking path right now
 - left/right bars still use horizontal strips, but they now fill inward from the bar edge
 - smoothness still depends on the host polling cadence
-- rich GPU telemetry currently depends on `nvidia-smi`, so the GPU section is NVIDIA-only
+- rich GPU telemetry depends on `nvidia-smi`, but non-NVIDIA GPUs now fall back to DMS metadata and temperature when available
 
 ## Audio output button
 
