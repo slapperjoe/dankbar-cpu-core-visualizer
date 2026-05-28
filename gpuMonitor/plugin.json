@@ -1,0 +1,16 @@
+{
+    "id": "gpuMonitor",
+    "name": "GPU Monitor",
+    "description": "NVIDIA and AMD GPU telemetry with process details for DankBar",
+    "version": "0.1.0",
+    "author": "Mark + Copilot",
+    "type": ["widget", "desktop-widget"],
+    "capabilities": ["dankbar-widget", "monitoring", "gpu-visualizer"],
+    "component": "./GpuMonitorWidget.qml",
+    "icon": "gpu",
+    "settings": "./GpuMonitorSettings.qml",
+    "permissions": [
+        "settings_read",
+        "settings_write"
+    ]
+}

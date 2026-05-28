@@ -1,0 +1,16 @@
+{
+    "id": "diskMonitor",
+    "name": "Disk Monitor",
+    "description": "Disk mount usage monitoring for DankBar",
+    "version": "0.1.0",
+    "author": "Mark + Copilot",
+    "type": ["widget", "desktop-widget"],
+    "capabilities": ["dankbar-widget", "monitoring", "disk-visualizer"],
+    "component": "./DiskMonitorWidget.qml",
+    "icon": "storage",
+    "settings": "./DiskMonitorSettings.qml",
+    "permissions": [
+        "settings_read",
+        "settings_write"
+    ]
+}

@@ -1,0 +1,16 @@
+{
+    "id": "memoryMonitor",
+    "name": "Memory Monitor",
+    "description": "System memory usage and process monitoring for DankBar",
+    "version": "0.1.0",
+    "author": "Mark + Copilot",
+    "type": ["widget", "desktop-widget"],
+    "capabilities": ["dankbar-widget", "monitoring", "memory-visualizer"],
+    "component": "./MemoryMonitorWidget.qml",
+    "icon": "sd_card",
+    "settings": "./MemoryMonitorSettings.qml",
+    "permissions": [
+        "settings_read",
+        "settings_write"
+    ]
+}

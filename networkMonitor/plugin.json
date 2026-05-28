@@ -1,0 +1,15 @@
+{
+  "id": "networkMonitor",
+  "name": "Network Monitor",
+  "description": "Network throughput monitor with rolling chart",
+  "version": "1.0.0",
+  "type": ["widget", "desktop-widget"],
+  "widget": {
+    "component": "./NetworkMonitorWidget.qml",
+    "name": "Network Monitor"
+  },
+  "settings": {
+    "component": "./NetworkMonitorSettings.qml"
+  },
+  "author": "slapperjoe"
+}
