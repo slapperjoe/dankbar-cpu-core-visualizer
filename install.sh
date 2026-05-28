@@ -4,14 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGINS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/DankMaterialShell/plugins"
 
-# Plugin definitions: "display_name  dir_name  plugin_id"
+# Plugin definitions: "display_name|dir_name|plugin_id"
 PLUGINS=(
-    "CPU Core Visualizer  cpuCoreVisualizer  cpuCoreVisualizer"
-    "GPU Monitor          gpuMonitor          gpuMonitor"
-    "Memory Monitor       memoryMonitor        memoryMonitor"
-    "Disk Monitor         diskMonitor          diskMonitor"
-    "Network Monitor      networkMonitor        networkMonitor"
-    "Audio Switcher       audioSwitcher        audioSwitcher"
+    "CPU Core Visualizer|cpuCoreVisualizer|cpuCoreVisualizer"
+    "GPU Monitor|gpuMonitor|gpuMonitor"
+    "Memory Monitor|memoryMonitor|memoryMonitor"
+    "Disk Monitor|diskMonitor|diskMonitor"
+    "Network Monitor|networkMonitor|networkMonitor"
+    "Audio Switcher|audioSwitcher|audioSwitcher"
 )
 
 usage() {
@@ -81,13 +81,13 @@ install_plugin() {
 if [[ "$INSTALL_ALL" == "true" ]]; then
     echo "Installing all monitoring plugins..."
     for entry in "${PLUGINS[@]}"; do
-        read -r display_name dir_name plugin_id <<< "$entry"
+        IFS='|' read -r display_name dir_name plugin_id <<< "$entry"
         install_plugin "$display_name" "$dir_name" "$plugin_id"
     done
 else
     found=false
     for entry in "${PLUGINS[@]}"; do
-        read -r display_name dir_name plugin_id <<< "$entry"
+        IFS='|' read -r display_name dir_name plugin_id <<< "$entry"
         if [[ "$plugin_id" == "$INSTALL_PLUGIN" ]]; then
             install_plugin "$display_name" "$dir_name" "$plugin_id"
             found=true
