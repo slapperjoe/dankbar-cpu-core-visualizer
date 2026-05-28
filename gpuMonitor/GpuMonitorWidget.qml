@@ -1,18 +1,16 @@
-import Qt 6.7
-import QtQuick 2.15
-import QtQuick.Layouts 6.7
-import io.github.quicksilver.quickshell 1.0 as Quickshell
-import io.github.dankmachines.dankmaterialshell.theming 1.0 as Theme
-import io.github.dankmachines.dankmaterialshell.plugins 1.0 as DankPlugins
-import io.github.dankmachines.dankmaterialshell.quickshell 1.0 as QuickshellInt
-import io.github.dankmachines.dankmaterialshell.stdio 1.0 as Stdio
+import QtQuick
+import Quickshell
+import qs.Common
+import qs.Modules.Plugins
+import qs.Services
+import qs.Widgets
 
 PluginComponent {
     id: root
 
     // ── Properties ─────────────────────────────────────────────
-    property var pluginData: DankPlugins.PluginStorage
-    property var gpuTelemetry: []
+    property var pluginData: Plugins.PluginStorage
+    property bool isDesktopWidget: false
     property var displayGpuTelemetry: []
     property var gpuProcesses: []
     property var topGpuProcesses: []
@@ -112,26 +110,26 @@ PluginComponent {
     }
 
     // ── nvidia-smi processes ─────────────────────────────────
-    Quickshell.Io {
+    Io {
         id: nvidiaGpuStatsProcess
         command: "nvidia-smi"
         arguments: ["--query-gpu=index,uuid,name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,power.limit,clock.grafix,clock.mem,utilization.enc,utilization.dec", "--format=csv"]
         running: false
         repeat: true
         interval: 1000
-        stdout: Stdio.StdioCollector {
+        stdout: StdioCollector {
             onStreamFinished: root.parseNvidiaGpuStats(text)
         }
     }
 
-    Quickshell.Io {
+    Io {
         id: nvidiaGpuAppsProcess
         command: "nvidia-smi"
         arguments: ["--query-compute-apps=gpu,pid,processName,usedMemory", "--format=csv"]
         running: false
         repeat: true
         interval: 2000
-        stdout: Stdio.StdioCollector {
+        stdout: StdioCollector {
             onStreamFinished: root.parseNvidiaGpuApps(text)
         }
     }
@@ -209,7 +207,7 @@ PluginComponent {
             const memoryTotalMiB = root.nvidiaNumber(parts[6], 0);
             const memoryUsagePercent = memoryTotalMiB > 0 ? root.clampUsage((memoryUsedMiB / memoryTotalMiB) * 100) : 0;
             nextGpus.push({
-                "index": Math.max(0, Math.round(root.nvidiaNumber(parts[0], i)),
+                "index": Math.max(0, Math.round(root.nvidiaNumber(parts[0], i))),
                 "uuid": parts[1],
                 "name": parts[2] || "NVIDIA GPU",
                 "temperature": root.nvidiaNumber(parts[3], 0),
@@ -247,7 +245,7 @@ PluginComponent {
             nextProcesses.push({
                 "gpuUuid": gpuUuid,
                 "gpuName": gpu ? gpu.name : "GPU",
-                "pid": Math.max(0, Math.round(root.nvidiaNumber(parts[1], 0)),
+                "pid": Math.max(0, Math.round(root.nvidiaNumber(parts[1], 0))),
                 "processName": parts[2] || "",
                 "usedMemoryMiB": root.nvidiaNumber(parts[3], 0)
             });

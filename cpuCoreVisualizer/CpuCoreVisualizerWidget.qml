@@ -193,7 +193,7 @@ PluginComponent {
 
     // ── Layout ─────────────────────────────────────────────────────────
     // ── DankBar mode ──────────────────────────────────────────────────
-    Group {
+    Item {
         visible: !root.isDesktopWidget
         implicitWidth: horizontalBar.implicitWidth
         implicitHeight: root.barThickness || 30

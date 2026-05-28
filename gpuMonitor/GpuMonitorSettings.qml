@@ -1,10 +1,10 @@
-import Qt 6.7
-import QtQuick 2.15
-import QtQuick.Layouts 6.7
-import io.github.dankmachines.dankmaterialshell.theming 1.0 as Theme
-import io.github.dankmachines.dankmaterialshell.plugins 1.0 as DankPlugins
+import QtQuick
+import qs.Common
+import qs.Modules.Plugins
+import qs.Services
+import qs.Widgets
 
-PluginSettingsPage {
+PluginSettings {
     id: root
 
     pluginId: "gpuMonitor"
@@ -12,8 +12,8 @@ PluginSettingsPage {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Theme.spacingM
-        spacing: Theme.spacingM
+        anchors.margins: 8
+        spacing: 8
 
         // ── Polling ───────────────────────────────────────
         PluginSettingsGroup {

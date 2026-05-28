@@ -1,14 +1,17 @@
-import Qt 6.7
-import QtQuick 2.15
+import QtQuick
+import Quickshell
+import qs.Common
+import qs.Modules.Plugins
+import qs.Services
+import qs.Widgets
 import QtQuick.Layouts 6.7
 import io.github.dankmachines.dankmaterialshell.theming 1.0 as Theme
-import io.github.dankmachines.dankmaterialshell.plugins 1.0 as DankPlugins
 
 PluginComponent {
     id: root
 
     // ── Properties ─────────────────────────────────────────────
-    property var pluginData: DankPlugins.PluginStorage
+    property var pluginData: Plugins.PluginStorage
     property bool isDesktopWidget: false
 
     // Disk settings
@@ -161,7 +164,7 @@ PluginComponent {
 
     // ── Functions ──────────────────────────────────────────────
     function clampUsage(value) {
-        return Math.max(0, Math.min(100, Number(value) || 0);
+        return Math.max(0, Math.min(100, Number(value) || 0));
     }
 
     function diskMountPath(mount) {
