@@ -154,8 +154,8 @@ PluginComponent {
         root.probeIntervalMs = Math.max(500, Math.min(30000, root.probeInterval));
         root.smoothingPercent = Math.max(1, Math.min(99, root.smoothingPercent));
         root.barWidth = Math.max(8, Math.min(80, root.barWidth));
-        root.barGap = Math.max(1, Math.min(20, root.barGap);
-        root.cornerRadius = Math.max(2, Math.min(20, root.pluginData.numberSetting("cornerRadius", 6));
+        root.barGap = Math.max(1, Math.min(20, root.barGap));
+        root.cornerRadius = Math.max(2, Math.min(20, root.pluginData.numberSetting("cornerRadius", 6)));
 
         DgopService.addRef(["memory", "processes"]);
         root.syncAnimatedMemoryUsage(true);

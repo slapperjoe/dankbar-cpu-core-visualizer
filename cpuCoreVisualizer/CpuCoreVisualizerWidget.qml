@@ -20,7 +20,7 @@ PluginComponent {
     property int animationDuration: Math.max(120, Math.round(numberSetting("animationDuration", 650)))
     property int cornerRadius: Math.max(0, Math.round(numberSetting("cornerRadius", 2)))
     property int probeInterval: Math.max(250, Math.round(numberSetting("probeInterval", 1000)))
-    property real smoothingFactor: Math.max(0.08, Math.min(0.85, numberSetting("smoothingPercent", 28) / 100)
+    property real smoothingFactor: Math.max(0.08, Math.min(0.85, numberSetting("smoothingPercent", 28) / 100))
     property string rawColorMode: stringSetting("colorMode", "vivid")
     property string colorMode: (root.rawColorMode === "soft" || root.rawColorMode === "mono" || root.rawColorMode === "base") ? "soft" : "vivid"
     property real fillOverlayOpacity: root.colorMode === "soft" ? 0.22 : 0.24

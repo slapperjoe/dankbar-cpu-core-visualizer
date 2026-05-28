@@ -134,8 +134,8 @@ PluginComponent {
         height: root.isDesktopWidget ? 240 : (root.barConfig ? root.barThickness || 40 : 240)
 
         // Desktop widget
-        visible: root.isDesktopWidget
         Rectangle {
+            visible: root.isDesktopWidget
             anchors.fill: parent
             color: Theme.surfaceContainer
             radius: Theme.cornerRadius
@@ -270,8 +270,8 @@ PluginComponent {
         }
 
         // DankBar widget
-        visible: !root.isDesktopWidget
         Rectangle {
+            visible: !root.isDesktopWidget
             anchors.fill: parent
             color: "transparent"
 

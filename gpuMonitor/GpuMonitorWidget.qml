@@ -97,7 +97,7 @@ PluginComponent {
         root.barWidth = Math.max(8, Math.min(80, root.barWidth));
         root.barGap = Math.max(1, Math.min(20, root.barGap));
         root.barLayout = root.pluginData.stringSetting("barLayout", "horizontal");
-        root.cornerRadius = Math.max(2, Math.min(20, root.pluginData.numberSetting("cornerRadius", 6));
+        root.cornerRadius = Math.max(2, Math.min(20, root.pluginData.numberSetting("cornerRadius", 6)));
 
         DgopService.addRef(["gpu"]);
         root.syncAnimatedGpuUsage(true);
