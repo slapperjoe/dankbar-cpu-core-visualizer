@@ -1,15 +1,16 @@
 {
-  "id": "networkMonitor",
-  "name": "Network Monitor",
-  "description": "Network throughput monitor with rolling chart",
-  "version": "1.0.0",
-  "type": ["widget", "desktop-widget"],
-  "widget": {
+    "id": "networkMonitor",
+    "name": "Network Monitor",
+    "description": "Network throughput monitor with rolling chart",
+    "version": "0.1.0",
+    "author": "Mark + Copilot",
+    "type": ["widget", "desktop-widget"],
+    "capabilities": ["dankbar-widget", "monitoring", "network-visualizer"],
     "component": "./NetworkMonitorWidget.qml",
-    "name": "Network Monitor"
-  },
-  "settings": {
-    "component": "./NetworkMonitorSettings.qml"
-  },
-  "author": "slapperjoe"
+    "icon": "network",
+    "settings": "./NetworkMonitorSettings.qml",
+    "permissions": [
+        "settings_read",
+        "settings_write"
+    ]
 }

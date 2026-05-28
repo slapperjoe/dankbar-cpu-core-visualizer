@@ -1,15 +1,16 @@
 {
-  "id": "audioSwitcher",
-  "name": "Audio Switcher",
-  "description": "Audio output switcher with sink selection",
-  "version": "1.0.0",
-  "type": ["widget", "desktop-widget"],
-  "widget": {
+    "id": "audioSwitcher",
+    "name": "Audio Switcher",
+    "description": "Audio output switcher with sink selection",
+    "version": "0.1.0",
+    "author": "Mark + Copilot",
+    "type": ["widget", "desktop-widget"],
+    "capabilities": ["dankbar-widget", "monitoring", "audio-switcher"],
     "component": "./AudioSwitcherWidget.qml",
-    "name": "Audio Switcher"
-  },
-  "settings": {
-    "component": "./AudioSwitcherSettings.qml"
-  },
-  "author": "slapperjoe"
+    "icon": "audio",
+    "settings": "./AudioSwitcherSettings.qml",
+    "permissions": [
+        "settings_read",
+        "settings_write"
+    ]
 }
