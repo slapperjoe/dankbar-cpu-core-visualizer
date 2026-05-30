@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell.Io
 import Quickshell.Services.Pipewire
 import qs.Common
 import qs.Services
@@ -37,20 +36,12 @@ PluginComponent {
         refreshTimer.running = false;
     }
 
+    // Log to /tmp/dms-audioSwitcher.log via shell
     function logToFile(message) {
-        try {
-            const logPath = "/tmp/dms-audioSwitcher.log";
-            const file = new LocalFile(logPath);
-            if (file.open(LocalFile.ReadWrite | LocalFile.Append) === false) {
-                console.error("[AudioSwitcher] Failed to open log file");
-                return;
-            }
-            const timestamp = new Date().toISOString();
-            file.write(QByteArray.fromAscii("[" + timestamp + "] " + message + "\n"));
-            file.close();
-        } catch(e) {
-            console.error("[AudioSwitcher] logToFile error:", e);
-        }
+        console.error(message);
+        const timestamp = new Date().toISOString();
+        const logCmd = ["sh", "-c", "echo \"[" + timestamp + "] " + message + " >> /tmp/dms-audioSwitcher.log"];
+        var proc = Qt.createQmlObject("import QtQuick; Process { command: " + JSON.stringify(logCmd) + "; running: true }", root, "logProc_" + Date.now());
     }
 
     function refreshAudioSinks() {
