@@ -115,13 +115,24 @@ PluginComponent {
     }
 
     // Right-click: show sink list popout
-    // pluginPopout is a child of PluginComponent, directly accessible
+    // pluginPopout is a child of PluginComponent — find it via children iteration
     pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
         root.logToFile("[AudioSwitcher] pillRightClickAction called at " + posX + ", " + posY);
-        var barPosition = axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1));
-        pluginPopout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen, barPosition, barThickness, barSpacing, barConfig);
-        pluginPopout.toggle();
-        root.logToFile("[AudioSwitcher] Popout toggled");
+        var popout = null;
+        for (var i = 0; i < root.children.length; i++) {
+            if (typeof root.children[i].setTriggerPosition === "function") {
+                popout = root.children[i];
+                break;
+            }
+        }
+        if (popout) {
+            var barPosition = axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1));
+            popout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen, barPosition, barThickness, barSpacing, barConfig);
+            popout.toggle();
+            root.logToFile("[AudioSwitcher] Popout toggled");
+        } else {
+            root.logToFile("[AudioSwitcher] ERROR: popout not found in children");
+        }
     }
 
     popoutContent: Component {
@@ -132,8 +143,8 @@ PluginComponent {
             showCloseButton: true
 
             ListView {
-                anchors.fill: parent
-                anchors.margins: Theme.spacingM
+                width: parent.width
+                height: 250
                 model: root.audioSinks
 
                 delegate: Rectangle {
@@ -167,5 +178,5 @@ PluginComponent {
     }
 
     popoutWidth: 350
-    popoutHeight: 400
+    popoutHeight: 320
 }

@@ -134,7 +134,9 @@
 - `import Quickshell.Services.Pipewire` is needed for audio device access
 - Accidentally removing `qs.Services` (as happened during refactoring) causes "Failed to enable plugin" error
 
-## PluginPopout Direct Access
-- `pluginPopout` is a child of `PluginComponent` and is directly accessible by ID in extending widgets
-- No need for `root.children` iteration — direct `pluginPopout.toggle()` works
-- `pluginPopout.setTriggerPosition(...)` must be called before `toggle()` to position the popout correctly
+## PluginPopout Direct Access — DOES NOT work
+- `pluginPopout` is defined with `id: pluginPopout` inside `PluginComponent.qml`
+- IDs from the base class are **not accessible** from extending widgets (`ReferenceError: pluginPopout is not defined`)
+- `root.pluginPopout` also fails — IDs are not properties
+- **Must use children iteration**: loop through `root.children` and find the child that has `setTriggerPosition` method
+- The `PluginPopout` child in `PluginComponent` is instantiated but its ID is scoped to the base file
