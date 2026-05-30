@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import Quickshell.Services.Pipewire
 import qs.Common
 import qs.Services
@@ -27,12 +28,29 @@ PluginComponent {
     }
 
     Component.onCompleted: {
-        console.error("[AudioSwitcher] Loading plugin...");
+        root.logToFile("[AudioSwitcher] Loading plugin...");
         root.refreshAudioSinks();
+        root.logToFile("[AudioSwitcher] Loaded");
     }
 
     Component.onDestruction: {
         refreshTimer.running = false;
+    }
+
+    function logToFile(message) {
+        try {
+            const logPath = "/tmp/dms-audioSwitcher.log";
+            const file = new LocalFile(logPath);
+            if (file.open(LocalFile.ReadWrite | LocalFile.Append) === false) {
+                console.error("[AudioSwitcher] Failed to open log file");
+                return;
+            }
+            const timestamp = new Date().toISOString();
+            file.write(QByteArray.fromAscii("[" + timestamp + "] " + message + "\n"));
+            file.close();
+        } catch(e) {
+            console.error("[AudioSwitcher] logToFile error:", e);
+        }
     }
 
     function refreshAudioSinks() {
@@ -101,12 +119,12 @@ PluginComponent {
     // Right-click: show sink list popout
     // Called from BasePill.onRightClicked; params are already computed
     pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
-        console.error("[AudioSwitcher] pillRightClickAction called, showing popout at", posX, posY);
+        root.logToFile("[AudioSwitcher] pillRightClickAction called, showing popout at " + posX + ", " + posY);
         pluginPopout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen,
             (axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1)),
             barThickness, barSpacing, barConfig);
         pluginPopout.toggle();
-        console.error("[AudioSwitcher] Popout toggled");
+        root.logToFile("[AudioSwitcher] Popout toggled");
     }
 
     popoutContent: Component {
