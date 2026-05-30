@@ -12,6 +12,8 @@ PluginComponent {
     property var audioSinks: []
     property int activeSinkIndex: 0
     property var lastSelectedSink: null
+    property var quickSwitchSinks: []
+    property var enabledSinks: []
 
     property string currentDeviceName: {
         var sink = root.lastSelectedSink || AudioService.sink;
@@ -31,17 +33,46 @@ PluginComponent {
         return "speaker";
     }
 
-    readonly property var quickSwitchSinks: {
-        const primary = pluginData["audioQuickSwitchPrimary"] || "";
-        const secondary = pluginData["audioQuickSwitchSecondary"] || "";
-        const configuredNames = [primary, secondary].filter(n => n && n.length > 0);
-        if (configuredNames.length >= 2) {
-            return root.audioSinks.filter(s => s && s.name && configuredNames.includes(s.name));
-        }
-        return root.audioSinks;
-    }
+    function refreshAudioSinks() {
+        const sinks = AudioService.getAvailableSinks();
+        if (Array.isArray(sinks)) {
+            root.audioSinks = sinks;
+            root.logToFile("Found " + root.audioSinks.length + " sinks");
 
-    readonly property bool quickSwitchEnabled: pluginData["audioQuickSwitchEnabled"] !== false && pluginData["audioQuickSwitchEnabled"] !== "false"
+            // Load persisted enabled sinks
+            var stored = pluginData["audioQuickSwitchEnabledSinks"];
+            var enabledNames = [];
+            if (stored && Array.isArray(stored)) {
+                enabledNames = stored;
+            } else if (typeof stored === "string" && stored.length > 0) {
+                enabledNames = [stored];
+            } else {
+                // Default: all sinks enabled
+                enabledNames = sinks.map(function(s) { return s.name; });
+            }
+            root.enabledSinks = enabledNames;
+
+            // quickSwitchSinks = intersection of audioSinks and enabledSinks
+            root.quickSwitchSinks = sinks.filter(function(s) {
+                return s.name && enabledNames.includes(s.name);
+            });
+
+            // Track active sink index within the full list
+            for (let i = 0; i < root.audioSinks.length; i++) {
+                if (AudioService.sink && root.audioSinks[i].name === AudioService.sink.name) {
+                    root.activeSinkIndex = i;
+                    root.logToFile("Active sink: " + i + " - " + AudioService.displayName(AudioService.sink));
+                    return;
+                }
+            }
+        } else {
+            root.audioSinks = [];
+            root.quickSwitchSinks = [];
+            root.enabledSinks = [];
+            root.logToFile("AudioService not available");
+        }
+        root.activeSinkIndex = 0;
+    }
 
     Timer {
         id: refreshTimer
@@ -74,24 +105,6 @@ PluginComponent {
         }
     }
 
-    function refreshAudioSinks() {
-        const sinks = AudioService.getAvailableSinks();
-        if (Array.isArray(sinks)) {
-            root.audioSinks = sinks;
-            console.error("[AudioSwitcher] Found", root.audioSinks.length, "sinks");
-            for (let i = 0; i < root.audioSinks.length; i++) {
-                if (AudioService.sink && root.audioSinks[i].name === AudioService.sink.name) {
-                    root.activeSinkIndex = i;
-                    console.error("[AudioSwitcher] Active sink:", i, "-", AudioService.displayName(AudioService.sink));
-                    return;
-                }
-            }
-        } else {
-            root.audioSinks = [];
-            console.error("[AudioSwitcher] AudioService not available");
-        }
-        root.activeSinkIndex = 0;
-    }
 
     function isSinkActive(sink) {
         if (!sink) return false;
@@ -106,20 +119,31 @@ PluginComponent {
         if (!sink) return false;
         Pipewire.preferredDefaultAudioSink = sink;
         root.lastSelectedSink = sink;
-        root.activeSinkIndex = root.audioSinks.indexOf(sink);
-        root.refreshAudioSinks();
+        root.logToFile("Selected: " + sink.name);
         return true;
     }
 
     function cycleToNextSink() {
-        const sinks = root.quickSwitchSinks;
+        var sinks = root.quickSwitchSinks;
         if (!sinks || sinks.length === 0) return false;
-        let nextIndex = (root.activeSinkIndex + 1) % sinks.length;
-        const nextSink = sinks[nextIndex];
+
+        // Find current index within quickSwitchSinks
+        var currentIndex = 0;
+        var currentSink = root.lastSelectedSink || AudioService.sink;
+        if (currentSink) {
+            for (var i = 0; i < sinks.length; i++) {
+                if (sinks[i].name === currentSink.name) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+        }
+
+        var nextIndex = (currentIndex + 1) % sinks.length;
+        var nextSink = sinks[nextIndex];
         Pipewire.preferredDefaultAudioSink = nextSink;
         root.lastSelectedSink = nextSink;
-        root.activeSinkIndex = nextIndex;
-        root.refreshAudioSinks();
+        root.logToFile("Cycled to: " + (nextSink.name || "unknown"));
         return true;
     }
 
@@ -158,13 +182,8 @@ PluginComponent {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    if (root.quickSwitchEnabled) {
-                        root.logToFile("[AudioSwitcher] Left-click (horizontal): cycling to next sink");
-                        root.cycleToNextSink();
-                    } else {
-                        root.logToFile("[AudioSwitcher] Left-click (horizontal): opening popout");
-                        root.openPopout();
-                    }
+                    root.logToFile("[AudioSwitcher] Left-click: cycling to next sink");
+                    root.cycleToNextSink();
                 }
             }
         }
@@ -191,24 +210,15 @@ PluginComponent {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    if (root.quickSwitchEnabled) {
-                        root.logToFile("[AudioSwitcher] Left-click (vertical): cycling to next sink");
-                        root.cycleToNextSink();
-                    } else {
-                        root.logToFile("[AudioSwitcher] Left-click (vertical): opening popout");
-                        root.openPopout();
-                    }
+                    root.logToFile("[AudioSwitcher] Left-click: cycling to next sink");
+                    root.cycleToNextSink();
                 }
             }
         }
     }
 
     pillClickAction: function() {
-        if (root.quickSwitchEnabled) {
-            root.cycleToNextSink();
-        } else {
-            root.openPopout();
-        }
+        root.cycleToNextSink();
     }
 
     pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
@@ -238,130 +248,116 @@ PluginComponent {
         }
     }
 
+    function toggleSinkEnabled(sink) {
+        // Toggle whether this sink is included in the auto-cycle pool
+        var enabled = root.enabledSinks;
+        var index = enabled.indexOf(sink.name);
+        if (index >= 0) {
+            // Don't disable the currently active sink
+            if (root.isSinkActive(sink)) {
+                root.logToFile("Cannot disable currently active sink: " + sink.name);
+                return;
+            }
+            enabled.splice(index, 1);
+        } else {
+            enabled.push(sink.name);
+        }
+        // Persist to pluginData
+        var copy = enabled.slice();
+        pluginData["audioQuickSwitchEnabledSinks"] = copy;
+        root.enabledSinks = copy;
+        // Re-filter quickSwitchSinks
+        root.quickSwitchSinks = root.audioSinks.filter(function(s) {
+            return s.name && copy.includes(s.name);
+        });
+        root.logToFile("Enabled sinks: " + copy);
+    }
+
     popoutContent: Component {
         PopoutComponent {
             id: popout
-            headerText: "Audio Output Devices"
-            detailsText: "Click to switch"
+            headerText: "Audio Outputs"
+            detailsText: "Left-click widget to cycle | Checkboxes control cycling pool"
             showCloseButton: true
 
             Column {
+                id: contentColumn
                 width: parent.width
-                spacing: Theme.spacingM
+                spacing: Theme.spacingS
 
-                Flow {
-                    id: sinkFlow
-                    width: parent.width
-                    spacing: Theme.spacingS
-                    visible: root.quickSwitchSinks.length > 1
+                Repeater {
+                    model: root.audioSinks
 
-                    Repeater {
-                        model: root.quickSwitchSinks
+                    delegate: Rectangle {
+                        required property var sink
+                        width: parent.width
+                        height: 48
+                        radius: Theme.cornerRadius
+                        color: root.isSinkActive(sink) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
-                        delegate: Rectangle {
-                            required property var modelData
-                            width: Math.max(110, Math.min(180, (sinkFlow.width - sinkFlow.spacing) / 2))
-                            height: 52
-                            radius: Theme.cornerRadius
-                            color: root.isSinkActive(modelData) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
-                            border.width: 1
-                            border.color: root.isSinkActive(modelData) ? Theme.primary : Theme.outline
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.bottom: parent.bottom
+                            width: parent.width
+                            height: 2
+                            radius: 1
+                            color: root.isSinkActive(parent.sink) ? Theme.primary : "transparent"
+                            visible: root.isSinkActive(parent.sink)
+                        }
 
-                            DankRipple {
-                                id: sinkRipple
-                                cornerRadius: parent.radius
+                        Row {
+                            id: sinkRow
+                            anchors.fill: parent
+                            anchors.margins: Theme.spacingM
+                            spacing: Theme.spacingM
+
+                            CheckBox {
+                                id: checkBox
+                                checked: root.enabledSinks.includes(parent.sink.name)
+                                enabled: !root.isSinkActive(parent.sink)
+                                onClicked: {
+                                    checkBox.checked = !checkBox.checked;
+                                    root.toggleSinkEnabled(parent.sink);
+                                }
                             }
 
                             MouseArea {
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onPressed: mouse => sinkRipple.trigger(mouse.x, mouse.y)
-                                onClicked: {
-                                    root.selectAudioOutput(parent.modelData);
-                                    popout.closePopout();
-                                }
-                            }
-
-                            Rectangle {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
+                                anchors.leftMargin: checkBox.width + Theme.spacingM
+                                anchors.top: parent.top
                                 anchors.bottom: parent.bottom
-                                height: 2
-                                radius: 1
-                                color: root.isSinkActive(parent.modelData) ? Theme.primary : "transparent"
-                                visible: root.isSinkActive(parent.modelData)
-                            }
-
-                            Row {
-                                anchors.fill: parent
-                                anchors.leftMargin: Theme.spacingM
-                                anchors.rightMargin: Theme.spacingM
-                                spacing: Theme.spacingS
-
-                                DankIcon {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    name: root.sinkIconName(modelData)
-                                    size: Theme.iconSize
-                                    color: root.isSinkActive(modelData) ? Theme.primary : Theme.surfaceText
-                                    filled: true
+                                anchors.topMargin: Theme.spacingXS
+                                anchors.bottomMargin: Theme.spacingXS
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.selectAudioOutput(parent.sink);
+                                    popout.closePopout();
                                 }
 
-                                StyledText {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: parent.width - Theme.iconSize - Theme.spacingS
-                                    text: root.sinkLabel(modelData)
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeSmall
-                                    font.weight: root.isSinkActive(modelData) ? Font.Medium : Font.Normal
-                                    elide: Text.ElideRight
+                                Row {
+                                    anchors.fill: parent
+                                    spacing: Theme.spacingM
+
+                                    DankIcon {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        name: root.sinkIconName(parent.sink)
+                                        size: Theme.iconSize
+                                        color: root.isSinkActive(parent.sink) ? Theme.primary : Theme.surfaceText
+                                        filled: true
+                                    }
+
+                                    StyledText {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width - Theme.iconSize - Theme.spacingM
+                                        text: root.sinkLabel(parent.sink)
+                                        color: Theme.surfaceText
+                                        font.pixelSize: Theme.fontSizeMedium
+                                        font.weight: root.isSinkActive(parent.sink) ? Font.Medium : Font.Normal
+                                        elide: Text.ElideRight
+                                    }
                                 }
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    width: parent.width
-                    height: 72
-                    radius: Theme.cornerRadius
-                    color: Theme.surfaceContainerHigh
-
-                    Row {
-                        anchors.fill: parent
-                        anchors.leftMargin: Theme.spacingM
-                        anchors.rightMargin: Theme.spacingM
-                        spacing: Theme.spacingM
-
-                        DankIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            name: root.currentDeviceIcon
-                            size: Theme.iconSizeLarge
-                            color: Theme.primary
-                            filled: true
-                        }
-
-                        Column {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - Theme.iconSizeLarge - Theme.spacingM * 2
-                            spacing: Theme.spacingXS
-
-                            StyledText {
-                                width: parent.width
-                                text: root.currentDeviceName
-                                font.pixelSize: Theme.fontSizeMedium
-                                font.weight: Font.Medium
-                                color: Theme.surfaceText
-                                elide: Text.ElideRight
-                            }
-
-                            StyledText {
-                                width: parent.width
-                                text: AudioService.sink ? AudioService.subtitle(AudioService.sink.name || "") : ""
-                                font.pixelSize: Theme.fontSizeSmall
-                                color: Theme.surfaceVariantText
-                                elide: Text.ElideRight
-                                visible: AudioService.sink && (AudioService.subtitle(AudioService.sink.name || "").length > 0)
                             }
                         }
                     }
@@ -370,6 +366,6 @@ PluginComponent {
         }
     }
 
-    popoutWidth: 350
-    popoutHeight: 320
+    popoutWidth: 380
+    popoutHeight: 0
 }
