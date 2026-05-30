@@ -97,9 +97,9 @@ PluginComponent {
         root.switchToSink(nextIndex);
     }
 
-    // Right-click: show sink list popout
+    // Right-click: show sink list popout (bypass triggerPopout which has an early-return bug)
     pillRightClickAction: function() {
-        root.triggerPopout();
+        pluginPopout.toggle();
     }
 
     popoutContent: Component {

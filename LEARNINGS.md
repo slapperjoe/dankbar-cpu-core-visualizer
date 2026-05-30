@@ -98,3 +98,9 @@
 - Popout is **not** shown on hover — it must be explicitly triggered
 - Call `root.triggerPopout()` from `pillRightClickAction` to show the popout on right-click
 - `PopoutComponent` is the content wrapper with header, details, and `closePopout()` callback
+
+## triggerPopout() Early-Return Bug
+- `PluginComponent.triggerPopout()` checks `if (pillClickAction)` and calls it, then returns early
+- This means if `pillClickAction` is defined, calling `triggerPopout()` will **never** reach the popout toggle code
+- **Workaround**: call `pluginPopout.toggle()` directly from `pillRightClickAction` instead of `root.triggerPopout()`
+- `pluginPopout` is a child `PluginPopout` in `PluginComponent` — accessible by `id` from the extending widget
