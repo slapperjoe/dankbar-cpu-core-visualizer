@@ -98,15 +98,15 @@ PluginComponent {
         root.switchToSink(nextIndex);
     }
 
-    // Right-click: show sink list popout with proper positioning
-    pillRightClickAction: function() {
-        const pill = horizontalPill;
-        const globalPos = pill.visualContent.mapToItem(null, 0, 0);
-        const currentScreen = parentScreen || Screen;
-        const barPosition = axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1));
-        const pos = SettingsData.getPopupTriggerPosition(globalPos, currentScreen, barThickness, pill.visualWidth, barSpacing, barPosition, barConfig);
-        pluginPopout.setTriggerPosition(pos.x, pos.y, pos.width, section, currentScreen, barPosition, barThickness, barSpacing, barConfig);
+    // Right-click: show sink list popout
+    // Called from BasePill.onRightClicked; params are already computed
+    pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
+        console.error("[AudioSwitcher] pillRightClickAction called, showing popout at", posX, posY);
+        pluginPopout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen,
+            (axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1)),
+            barThickness, barSpacing, barConfig);
         pluginPopout.toggle();
+        console.error("[AudioSwitcher] Popout toggled");
     }
 
     popoutContent: Component {

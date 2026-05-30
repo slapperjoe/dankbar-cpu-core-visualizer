@@ -112,3 +112,17 @@
 - Without `setTriggerPosition`, the popout appears at (0,0) — effectively invisible
 - `barPosition` is derived from `axis?.edge`: top=0, bottom=1, left=2, right=3
 - `qs.Services` must be imported for `SettingsData`
+
+## pillRightClickAction Signature
+- `BasePill.onRightClicked` checks `pillRightClickAction.length`
+- If length is 0, calls `pillRightClickAction()` with no arguments
+- If length > 0, calls `pillRightClickAction(pos.x, pos.y, pos.width, section, currentScreen)`
+- The 5-arg version receives position data from `SettingsData.getPopupTriggerPosition()`
+- Inside the action, `pluginPopout`, `barConfig`, `barThickness`, `barSpacing`, `section`, and `axis` are all inherited from `PluginComponent`
+- `pluginPopout` is accessible by ID from the widget file
+
+## Plugin Caching & Version
+- Version bump in `plugin.json` may NOT bust the QML cache
+- DMS uses `Qt.createComponent(url, Component.PreferSynchronous)` which caches components
+- To force reload: restart DMS completely or clear `~/.cache/quickshell/`
+- Cached QML files may persist across sessions unless explicitly cleared
