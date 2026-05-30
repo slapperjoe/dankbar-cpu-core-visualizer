@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Services.Pipewire
 import qs.Common
+import qs.Services
 import qs.Widgets
 import qs.Modules.Plugins
 
@@ -97,8 +98,14 @@ PluginComponent {
         root.switchToSink(nextIndex);
     }
 
-    // Right-click: show sink list popout (bypass triggerPopout which has an early-return bug)
+    // Right-click: show sink list popout with proper positioning
     pillRightClickAction: function() {
+        const pill = horizontalPill;
+        const globalPos = pill.visualContent.mapToItem(null, 0, 0);
+        const currentScreen = parentScreen || Screen;
+        const barPosition = axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1));
+        const pos = SettingsData.getPopupTriggerPosition(globalPos, currentScreen, barThickness, pill.visualWidth, barSpacing, barPosition, barConfig);
+        pluginPopout.setTriggerPosition(pos.x, pos.y, pos.width, section, currentScreen, barPosition, barThickness, barSpacing, barConfig);
         pluginPopout.toggle();
     }
 

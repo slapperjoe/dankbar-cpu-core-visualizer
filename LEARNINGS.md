@@ -104,3 +104,11 @@
 - This means if `pillClickAction` is defined, calling `triggerPopout()` will **never** reach the popout toggle code
 - **Workaround**: call `pluginPopout.toggle()` directly from `pillRightClickAction` instead of `root.triggerPopout()`
 - `pluginPopout` is a child `PluginPopout` in `PluginComponent` — accessible by `id` from the extending widget
+
+## Popout Positioning Requirements
+- `pluginPopout.toggle()` alone is insufficient — popout must be positioned first
+- Call `pluginPopout.setTriggerPosition(x, y, width, section, screen, barPosition, barThickness, barSpacing, barConfig)`
+- Use `SettingsData.getPopupTriggerPosition()` to compute the correct screen position based on bar edge
+- Without `setTriggerPosition`, the popout appears at (0,0) — effectively invisible
+- `barPosition` is derived from `axis?.edge`: top=0, bottom=1, left=2, right=3
+- `qs.Services` must be imported for `SettingsData`
