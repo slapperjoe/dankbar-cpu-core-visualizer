@@ -76,13 +76,14 @@
 - **Do NOT** put a `MouseArea` inside the pill — `BasePill` already provides one
 - Interaction is routed through `pillClickAction` and `pillRightClickAction` callbacks
 
-### Popout Content
+### Popout Content & PopoutComponent Layout
 - `popoutContent` takes a `Component` with `PopoutComponent`
-- `PopoutComponent` has `closePopout()` to dismiss the popout after selecting a sink
-- The popout is shown on hover by default; `pillRightClickAction` can be used to toggle it
 - `PopoutComponent` extends `Column`, provides `headerText`, `detailsText`, `showCloseButton`, `closePopout`, `parentPopout`
 - `closePopout` callback is injected by `PluginPopout.onLoaded` — calling it closes the popout
 - `parentPopout` reference is also injected for accessing the parent `DankPopout`
+- **CRITICAL**: `PopoutComponent` is a `Column` with no inherent height. Any `ListView` inside it **must have an explicit height** — `anchors.fill: parent` results in zero height because the Column has no height to fill
+- The popout height is determined by `pluginPopout.contentHeight` which binds to `item.implicitHeight`. Give child components explicit dimensions for reliable rendering
+- The popout is shown on hover by default; `pillRightClickAction` can be used to toggle it
 
 ## DankIcon & Material Symbols Icons
 - `DankIcon` wraps `StyledText` with Material Symbols Rounded font
