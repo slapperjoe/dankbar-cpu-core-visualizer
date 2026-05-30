@@ -126,3 +126,15 @@
 - DMS uses `Qt.createComponent(url, Component.PreferSynchronous)` which caches components
 - To force reload: restart DMS completely or clear `~/.cache/quickshell/`
 - Cached QML files may persist across sessions unless explicitly cleared
+
+## Required Imports for Widget Plugins
+- `import qs.Services` is REQUIRED when using `ToastService` — it lives in `dms/Services/ToastService.qml`
+- Without `import qs.Services`, `ToastService` is undefined → QML compilation failure → plugin won't load
+- The full set of imports needed for a typical widget: `qs.Common`, `qs.Services`, `qs.Widgets`, `qs.Modules.Plugins`
+- `import Quickshell.Services.Pipewire` is needed for audio device access
+- Accidentally removing `qs.Services` (as happened during refactoring) causes "Failed to enable plugin" error
+
+## PluginPopout Direct Access
+- `pluginPopout` is a child of `PluginComponent` and is directly accessible by ID in extending widgets
+- No need for `root.children` iteration — direct `pluginPopout.toggle()` works
+- `pluginPopout.setTriggerPosition(...)` must be called before `toggle()` to position the popout correctly

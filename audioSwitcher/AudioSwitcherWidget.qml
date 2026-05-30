@@ -1,6 +1,8 @@
 import QtQuick
+import Quickshell.Io
 import Quickshell.Services.Pipewire
 import qs.Common
+import qs.Services
 import qs.Widgets
 import qs.Modules.Plugins
 
@@ -35,9 +37,18 @@ PluginComponent {
         refreshTimer.running = false;
     }
 
-    // Log to stderr (visible in journalctl for DMS)
+    // Dual logging: stderr + file
     function logToFile(message) {
         console.error("[AudioSwitcher]", message);
+        try {
+            var logFile = new File("/tmp/dms-audioSwitcher.log");
+            if (logFile.open(File.AppendOnly)) {
+                logFile.writeLine("[" + new Date().toISOString() + "] " + message);
+                logFile.close();
+            }
+        } catch(e) {
+            // File logging failed, stderr still works
+        }
     }
 
     function refreshAudioSinks() {
@@ -104,25 +115,13 @@ PluginComponent {
     }
 
     // Right-click: show sink list popout
-    // Called from BasePill.onRightClicked; params are already computed
+    // pluginPopout is a child of PluginComponent, directly accessible
     pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
         root.logToFile("[AudioSwitcher] pillRightClickAction called at " + posX + ", " + posY);
-        // pluginPopout is defined in PluginComponent.qml — find it via children
-        var popout = null;
-        for (var i = 0; i < root.children.length; i++) {
-            if (typeof root.children[i].setTriggerPosition === "function") {
-                popout = root.children[i];
-                break;
-            }
-        }
-        if (popout) {
-            var barPosition = axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1));
-            popout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen, barPosition, barThickness, barSpacing, barConfig);
-            popout.toggle();
-            root.logToFile("[AudioSwitcher] Popout toggled");
-        } else {
-            root.logToFile("[AudioSwitcher] ERROR: popout not found in children");
-        }
+        var barPosition = axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1));
+        pluginPopout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen, barPosition, barThickness, barSpacing, barConfig);
+        pluginPopout.toggle();
+        root.logToFile("[AudioSwitcher] Popout toggled");
     }
 
     popoutContent: Component {
