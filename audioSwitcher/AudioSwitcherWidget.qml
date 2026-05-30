@@ -65,13 +65,12 @@ PluginComponent {
     }
 
     // ── Bar Widget ────────────────────────────────────────
-    // Use a Row (not MouseArea) — BasePill handles clicks/wheel
     horizontalBarPill: Component {
         Row {
             spacing: Theme.spacingS
 
             DankIcon {
-                name: "audio"
+                name: "volume_up"
                 size: Theme.iconSize
                 color: Theme.widgetTextColor
                 anchors.verticalCenter: parent.verticalCenter
@@ -100,7 +99,7 @@ PluginComponent {
 
     // Right-click: show sink list popout
     pillRightClickAction: function() {
-        // popoutContent handles this automatically when popoutContent is defined
+        root.triggerPopout();
     }
 
     popoutContent: Component {

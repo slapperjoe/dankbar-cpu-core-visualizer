@@ -65,8 +65,8 @@
      - Left-click → `pillClickAction` callback
      - Right-click → `pillRightClickAction` callback
      - Mouse wheel → cycles through sinks or scrolls
-     - Hover → shows `popoutContent`
-  3. If `popoutContent` is defined, hovering shows the popout; clicking closes it
+      - Hover → changes background transparency (does NOT auto-show popout)
+   3. Popout is NOT shown on hover — it must be explicitly triggered via `pillClickAction` or `pillRightClickAction` calling `root.triggerPopout()`
   4. `popoutWidth` and `popoutHeight` control popout dimensions
 
 ### Pill Content Requirements
@@ -80,3 +80,21 @@
 - `popoutContent` takes a `Component` with `PopoutComponent`
 - `PopoutComponent` has `closePopout()` to dismiss the popout after selecting a sink
 - The popout is shown on hover by default; `pillRightClickAction` can be used to toggle it
+- `PopoutComponent` extends `Column`, provides `headerText`, `detailsText`, `showCloseButton`, `closePopout`, `parentPopout`
+- `closePopout` callback is injected by `PluginPopout.onLoaded` — calling it closes the popout
+- `parentPopout` reference is also injected for accessing the parent `DankPopout`
+
+## DankIcon & Material Symbols Icons
+- `DankIcon` wraps `StyledText` with Material Symbols Rounded font
+- **Icon names MUST be valid Material Symbols names** — `"audio"` is NOT a valid name
+- Valid names: `"volume_up"`, `"volume_down"`, `"headphones"`, `"speaker"`, `"headset"`, `"cast_connected"`, etc.
+- Find available icons in `MaterialSymbolsRounded[FILL,GRAD,opsz,wght].codepoints`
+- `DankIcon` properties: `name` (icon text), `size` (font pixelSize), `color`, `filled` (FILL axis 0 or 1)
+- `DankIcon` has `implicitWidth` and `implicitHeight` based on `size`
+
+## PluginPopout & Popout Triggering
+- `PluginPopout` wraps `DankPopout` and manages `popoutContent` loading
+- `popoutTarget` on `BasePill` is set to `pluginPopout` for context/position setup
+- Popout is **not** shown on hover — it must be explicitly triggered
+- Call `root.triggerPopout()` from `pillRightClickAction` to show the popout on right-click
+- `PopoutComponent` is the content wrapper with header, details, and `closePopout()` callback
