@@ -222,7 +222,7 @@ PluginComponent {
 
                         delegate: Rectangle {
                             required property var modelData
-                            width: Math.max(110, Math.min(180, (sinkFlow.width - sinkFlow.spacing) / 2)
+                            width: Math.max(110, Math.min(180, (sinkFlow.width - sinkFlow.spacing) / 2))
                             height: 52
                             radius: Theme.cornerRadius
                             color: root.isSinkActive(modelData) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
