@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell.Services.Pipewire
 import qs.Common
-import qs.Services
 import qs.Widgets
 import qs.Modules.Plugins
 
@@ -107,12 +106,23 @@ PluginComponent {
     // Right-click: show sink list popout
     // Called from BasePill.onRightClicked; params are already computed
     pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
-        root.logToFile("[AudioSwitcher] pillRightClickAction called, showing popout at " + posX + ", " + posY);
-        pluginPopout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen,
-            (axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1)),
-            barThickness, barSpacing, barConfig);
-        pluginPopout.toggle();
-        root.logToFile("[AudioSwitcher] Popout toggled");
+        root.logToFile("[AudioSwitcher] pillRightClickAction called at " + posX + ", " + posY);
+        // pluginPopout is defined in PluginComponent.qml — find it via children
+        var popout = null;
+        for (var i = 0; i < root.children.length; i++) {
+            if (typeof root.children[i].setTriggerPosition === "function") {
+                popout = root.children[i];
+                break;
+            }
+        }
+        if (popout) {
+            var barPosition = axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1));
+            popout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen, barPosition, barThickness, barSpacing, barConfig);
+            popout.toggle();
+            root.logToFile("[AudioSwitcher] Popout toggled");
+        } else {
+            root.logToFile("[AudioSwitcher] ERROR: popout not found in children");
+        }
     }
 
     popoutContent: Component {
