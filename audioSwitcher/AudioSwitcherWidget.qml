@@ -36,12 +36,9 @@ PluginComponent {
         refreshTimer.running = false;
     }
 
-    // Log to /tmp/dms-audioSwitcher.log via shell
+    // Log to stderr (visible in journalctl for DMS)
     function logToFile(message) {
-        console.error(message);
-        const timestamp = new Date().toISOString();
-        const logCmd = ["sh", "-c", "echo \"[" + timestamp + "] " + message + " >> /tmp/dms-audioSwitcher.log"];
-        var proc = Qt.createQmlObject("import QtQuick; Process { command: " + JSON.stringify(logCmd) + "; running: true }", root, "logProc_" + Date.now());
+        console.error("[AudioSwitcher]", message);
     }
 
     function refreshAudioSinks() {
