@@ -11,18 +11,21 @@ PluginComponent {
 
     property var audioSinks: []
     property int activeSinkIndex: 0
+    property var lastSelectedSink: null
 
-    readonly property string currentDeviceName: {
-        if (AudioService.sink) {
-            return AudioService.displayName(AudioService.sink) || AudioService.sink.description || "Audio output";
+    property string currentDeviceName: {
+        var sink = root.lastSelectedSink || AudioService.sink;
+        if (sink) {
+            return AudioService.displayName(sink) || sink.description || "Audio output";
         }
         return "No audio output";
     }
 
-    readonly property string currentDeviceIcon: {
-        if (!AudioService.sink)
+    property string currentDeviceIcon: {
+        var sink = root.lastSelectedSink || AudioService.sink;
+        if (!sink)
             return "speaker";
-        const icon = String(AudioService.sinkIcon(AudioService.sink) || "speaker");
+        const icon = String(AudioService.sinkIcon(sink) || "speaker");
         if (icon === "tv") return "monitor";
         if (icon === "headset") return "headset";
         return "speaker";
@@ -33,12 +36,12 @@ PluginComponent {
         const secondary = pluginData["audioQuickSwitchSecondary"] || "";
         const configuredNames = [primary, secondary].filter(n => n && n.length > 0);
         if (configuredNames.length >= 2) {
-            return root.audioSinks.filter(s => configuredNames.includes(s.name));
+            return root.audioSinks.filter(s => s && s.name && configuredNames.includes(s.name));
         }
         return root.audioSinks;
     }
 
-    readonly property bool quickSwitchEnabled: pluginData["audioQuickSwitchEnabled"] === true || pluginData["audioQuickSwitchEnabled"] === "true"
+    readonly property bool quickSwitchEnabled: pluginData["audioQuickSwitchEnabled"] !== false && pluginData["audioQuickSwitchEnabled"] !== "false"
 
     Timer {
         id: refreshTimer
@@ -92,13 +95,31 @@ PluginComponent {
 
     function isSinkActive(sink) {
         if (!sink) return false;
+        // Check against last selected sink first (immediate UI feedback)
+        if (root.lastSelectedSink && sink.name && root.lastSelectedSink.name === sink.name)
+            return true;
+        // Fall back to AudioService.sink
         return Boolean(AudioService.sink && sink.name && AudioService.sink.name && sink.name === AudioService.sink.name);
     }
 
     function selectAudioOutput(sink) {
         if (!sink) return false;
         Pipewire.preferredDefaultAudioSink = sink;
+        root.lastSelectedSink = sink;
         root.activeSinkIndex = root.audioSinks.indexOf(sink);
+        root.refreshAudioSinks();
+        return true;
+    }
+
+    function cycleToNextSink() {
+        const sinks = root.quickSwitchSinks;
+        if (!sinks || sinks.length === 0) return false;
+        let nextIndex = (root.activeSinkIndex + 1) % sinks.length;
+        const nextSink = sinks[nextIndex];
+        Pipewire.preferredDefaultAudioSink = nextSink;
+        root.lastSelectedSink = nextSink;
+        root.activeSinkIndex = nextIndex;
+        root.refreshAudioSinks();
         return true;
     }
 
@@ -137,8 +158,13 @@ PluginComponent {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    root.logToFile("[AudioSwitcher] Left-click: opening popout");
-                    root.openPopout();
+                    if (root.quickSwitchEnabled) {
+                        root.logToFile("[AudioSwitcher] Left-click (horizontal): cycling to next sink");
+                        root.cycleToNextSink();
+                    } else {
+                        root.logToFile("[AudioSwitcher] Left-click (horizontal): opening popout");
+                        root.openPopout();
+                    }
                 }
             }
         }
@@ -165,15 +191,24 @@ PluginComponent {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    root.logToFile("[AudioSwitcher] Left-click: opening popout");
-                    root.openPopout();
+                    if (root.quickSwitchEnabled) {
+                        root.logToFile("[AudioSwitcher] Left-click (vertical): cycling to next sink");
+                        root.cycleToNextSink();
+                    } else {
+                        root.logToFile("[AudioSwitcher] Left-click (vertical): opening popout");
+                        root.openPopout();
+                    }
                 }
             }
         }
     }
 
     pillClickAction: function() {
-        root.openPopout();
+        if (root.quickSwitchEnabled) {
+            root.cycleToNextSink();
+        } else {
+            root.openPopout();
+        }
     }
 
     pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
@@ -183,14 +218,17 @@ PluginComponent {
 
     function openPopout() {
         var popout = null;
+        var pill = null;
         for (var i = 0; i < root.children.length; i++) {
-            if (typeof root.children[i].setTriggerPosition === "function") {
-                popout = root.children[i];
-                break;
+            var child = root.children[i];
+            if (typeof child.setTriggerPosition === "function") {
+                popout = child;
+            }
+            if (typeof child.mapToItem === "function" && child.width !== undefined && child.width > 0 && typeof child.setTriggerPosition !== "function") {
+                pill = child;
             }
         }
-        if (popout) {
-            var pill = root.isVertical ? root.verticalPill : root.horizontalPill;
+        if (popout && pill) {
             var globalPos = pill.mapToItem(null, 0, 0);
             var screen = root.parentScreen || Screen;
             var barPosition = axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1));
@@ -243,6 +281,16 @@ PluginComponent {
                                     root.selectAudioOutput(parent.modelData);
                                     popout.closePopout();
                                 }
+                            }
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: 2
+                                radius: 1
+                                color: root.isSinkActive(parent.modelData) ? Theme.primary : "transparent"
+                                visible: root.isSinkActive(parent.modelData)
                             }
 
                             Row {

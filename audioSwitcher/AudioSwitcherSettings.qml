@@ -14,20 +14,23 @@ PluginSettings {
             label: "Auto cycle all outputs",
             value: ""
         }];
-        const sinks = AudioService.getAvailableSinks();
-        if (!Array.isArray(sinks))
-            return options;
+        try {
+            const sinks = AudioService.getAvailableSinks();
+            if (!Array.isArray(sinks))
+                return options;
 
-        for (let i = 0; i < sinks.length; i++) {
-            const node = sinks[i];
-            const label = AudioService.displayName(node);
-            const subtitle = AudioService.subtitle(node.name || "");
-            options.push({
-                label: subtitle.length > 0 ? label + " (" + subtitle + ")" : label,
-                value: node.name || ""
-            });
+            for (let i = 0; i < sinks.length; i++) {
+                const node = sinks[i];
+                const label = AudioService.displayName(node);
+                const subtitle = AudioService.subtitle(node.name || "");
+                options.push({
+                    label: subtitle.length > 0 ? label + " (" + subtitle + ")" : label,
+                    value: node.name || ""
+                });
+            }
+        } catch (e) {
+            // AudioService not available yet
         }
-
         return options;
     }
 
