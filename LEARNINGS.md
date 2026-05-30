@@ -128,12 +128,24 @@
 - To force reload: restart DMS completely or clear `~/.cache/quickshell/`
 - Cached QML files may persist across sessions unless explicitly cleared
 
+## Audio Switcher — matching main branch behavior
+- The main branch audio section used `AudioService` (not raw `Pipewire.nodes`)
+- Pill was icon-only (no text). Icon type was dynamic: `speaker`, `headset`, or `monitor` based on `AudioService.sinkIcon()`
+- Left-click opened the popout (did NOT cycle sinks) — matching `deferSectionPopout("audio")`
+- Popout used a `Flow` + `Repeater` with sink cards (icon + label), not a `ListView`
+- Popout filtered sinks based on `audioQuickSwitchPrimary` / `audioQuickSwitchSecondary` settings
+- Popout also showed a "current device" info card at the bottom with icon, name, and subtitle
+- Settings included: `audioQuickSwitchEnabled`, `popoutOpenOnClick`, `audioQuickSwitchPrimary`, `audioQuickSwitchSecondary`
+- `AudioService.getAvailableSinks()` returns the sink list. `AudioService.displayName()`, `AudioService.sinkIcon()`, `AudioService.subtitle()` provide formatting helpers
+- `Pipewire.preferredDefaultAudioSink = sink` is still used to change the active output
+- The pill used `DankRipple` for press animation (matching main branch)
+
 ## Required Imports for Widget Plugins
-- `import qs.Services` is REQUIRED when using `ToastService` — it lives in `dms/Services/ToastService.qml`
-- Without `import qs.Services`, `ToastService` is undefined → QML compilation failure → plugin won't load
+- `import qs.Services` is REQUIRED for `ToastService` (in `dms/Services/ToastService.qml`) and `AudioService` (in `dms/Services/AudioService.qml`)
+- Without `import qs.Services`, both are undefined → QML compilation failure → plugin won't load
 - The full set of imports needed for a typical widget: `qs.Common`, `qs.Services`, `qs.Widgets`, `qs.Modules.Plugins`
-- `import Quickshell.Services.Pipewire` is needed for audio device access
-- Accidentally removing `qs.Services` (as happened during refactoring) causes "Failed to enable plugin" error
+- `import Quickshell.Services.Pipewire` is needed for `Pipewire.preferredDefaultAudioSink`
+- `import Quickshell.Io` is needed for `File` class (file logging)
 
 ## PluginPopout Direct Access — DOES NOT work
 - `pluginPopout` is defined with `id: pluginPopout` inside `PluginComponent.qml`
