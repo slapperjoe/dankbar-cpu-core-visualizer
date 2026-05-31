@@ -159,16 +159,18 @@ PluginComponent {
             root.selectedDiskMountPaths = ["/"];
         }
 
-        DgopService.addRef(["cpu", "memory", "diskmounts", "processes", "network", "gpu"]);
+        DgopService.addRef(["cpu", "memory", "disk", "processes", "network", "gpu"]);
         DgopService.updateAllStats();
         root.syncAnimatedDiskUsage(true);
+        root.popoutTriggerMode = pluginData["popoutTriggerMode"] || "click";
+        root._badgeRefresh += 1;
         console.error("[diskMonitor] diskMounts:", JSON.stringify(DgopService.diskMounts));
         console.error("[diskMonitor] diskMountList:", JSON.stringify(root.diskMountList));
         console.error("[diskMonitor] selectedDiskMountPaths:", JSON.stringify(root.selectedDiskMountPaths));
     }
 
     Component.onDestruction: {
-        DgopService.removeRef(["cpu", "memory", "diskmounts", "processes", "network", "gpu"]);
+        DgopService.removeRef(["cpu", "memory", "disk", "processes", "network", "gpu"]);
     }
 
     // ── Functions ──────────────────────────────────────────────
@@ -278,7 +280,7 @@ PluginComponent {
     }
 
     // ── Popout trigger setting ────────────────────────────
-    property string popoutTriggerMode: pluginData["popoutTriggerMode"] || "click"
+    property string popoutTriggerMode: "click"
 
     // ── Pill badge ────────────────────────────────────────
     property int _badgeRefresh: 0
@@ -286,7 +288,7 @@ PluginComponent {
         return Math.round(root.diskUsageValue);
     }
 
-    property real barThickness: root.barConfig ? (root.barConfig.thickness || 40) : 40
+    property real barThickness: 40
 
     horizontalBarPill: Component {
         Row {
