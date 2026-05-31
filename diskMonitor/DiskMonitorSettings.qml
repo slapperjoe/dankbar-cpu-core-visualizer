@@ -89,6 +89,22 @@ PluginSettings {
             }
         }
 
+        // ── Interaction ────────────────────────────────────
+        PluginSettingsGroup {
+            Layout.fillWidth: true
+            title: "Interaction"
+
+            PluginSettingsRow {
+                title: "Popout Trigger"
+                subtitle: "How to open the detail popout"
+                control: PluginSettingsSelector {
+                    options: ["hover", "click"]
+                    selected: root.pluginData.stringSetting("popoutTriggerMode", "hover")
+                    onSelected: root.pluginData.setString("popoutTriggerMode", selected)
+                }
+            }
+        }
+
         // ── Animation ─────────────────────────────────────
         PluginSettingsGroup {
             Layout.fillWidth: true
