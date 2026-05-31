@@ -404,7 +404,7 @@ PluginComponent {
             id: popout
             headerText: "Audio Outputs"
             detailsText: "Left-click widget to cycle | Click a sink to switch"
-            showCloseButton: true
+            showCloseButton: false
 
             Column {
                 width: parent.width
@@ -421,6 +421,7 @@ PluginComponent {
                     maximum: 100
                     step: 1
                     value: root.currentVolume
+                    leftIcon: "volume_up"
                     onSliderValueChanged: function(newValue) {
                         AudioService.setVolume(newValue);
                     }
