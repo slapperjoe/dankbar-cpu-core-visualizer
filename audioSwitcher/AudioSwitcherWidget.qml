@@ -385,7 +385,7 @@ PluginComponent {
         PopoutComponent {
             id: popout
             headerText: "Audio Outputs"
-            detailsText: "Left-click widget to cycle | Checkboxes control cycling pool"
+            detailsText: "Left-click widget to cycle | Click a sink to switch"
             showCloseButton: true
 
             ListView {
@@ -401,134 +401,87 @@ PluginComponent {
                     radius: Theme.cornerRadius
                     color: root.isSinkActive(modelData) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.bottom: parent.bottom
-                            width: parent.width
-                            height: 2
-                            radius: 1
-                            color: root.isSinkActive(modelData) ? Theme.primary : "transparent"
-                            visible: root.isSinkActive(modelData)
+                    // Active indicator bar at bottom
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.bottom: parent.bottom
+                        width: parent.width
+                        height: 2
+                        radius: 1
+                        color: root.isSinkActive(modelData) ? Theme.primary : "transparent"
+                        visible: root.isSinkActive(modelData)
+                    }
+
+                    Row {
+                        id: sinkRow
+                        anchors.fill: parent
+                        anchors.margins: Theme.spacingM
+                        spacing: Theme.spacingM
+
+                        DankIcon {
+                            id: sinkIconItem
+                            width: Theme.iconSize
+                            height: width
+                            name: root.sinkIconName(modelData)
+                            color: root.isSinkActive(modelData) ? Theme.primary : Theme.surfaceText
+                            filled: true
                         }
 
-                        Row {
-                            id: sinkRow
-                            anchors.fill: parent
-                            anchors.margins: Theme.spacingM
-                            spacing: Theme.spacingM
+                        // Cycle position badge
+                        Rectangle {
+                            id: sinkBadgeItem
+                            property int cycleIdx: root.sinkCycleIndex(modelData)
+                            property int _force: root._badgeRefresh
+                            visible: cycleIdx > 0
+                            anchors.left: sinkIconItem.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: -8
+                            anchors.verticalCenterOffset: 0
+                            width: 16
+                            height: width
+                            radius: width / 2
+                            color: Theme.primary
+                            border.width: 1
+                            border.color: root.isSinkActive(modelData) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
-                            // Custom checkbox (CheckBox type not available)
-                            Rectangle {
-                                id: checkboxBox
-                                width: Theme.iconSize
-                                height: width
-                                radius: 3
-                                border.width: 1
-                                border.color: root.isSinkActive(modelData) ? Theme.primary : Theme.outline
-                                color: root.enabledSinks.includes(modelData.name) ? Theme.primary : "transparent"
-
-                                MouseArea {
-                                    id: checkboxClick
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    enabled: !root.isSinkActive(modelData)
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.toggleSinkEnabled(modelData);
-                                    }
-                                }
-
-                                // Checkmark icon when enabled
-                                DankIcon {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    name: "check"
-                                    size: Theme.iconSize - 4
-                                    color: "white"
-                                    filled: true
-                                    visible: root.enabledSinks.includes(modelData.name)
-                                }
-                            }
-
-                            Row {
-                                id: sinkInfo
-                                anchors.left: checkboxBox.right
-                                anchors.right: parent.right
-                                anchors.leftMargin: Theme.spacingM
-                                anchors.rightMargin: Theme.spacingXS
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
+                            StyledText {
+                                anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: Theme.spacingM
+                                anchors.horizontalCenterOffset: -1
+                                anchors.verticalCenterOffset: 1
+                                text: String(parent.cycleIdx)
+                                color: Theme.surfaceContainerHigh
+                                font.pixelSize: 10
+                                font.weight: Font.Bold
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
 
-                                DankIcon {
-                                    id: sinkIconItem
-                                    width: Theme.iconSize
-                                    height: width
-                                    name: root.sinkIconName(modelData)
-                                    color: root.isSinkActive(modelData) ? Theme.primary : Theme.surfaceText
-                                    filled: true
-                                }
+                        StyledText {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: Theme.iconSize + Theme.spacingM
+                            anchors.rightMargin: 0
+                            text: root.sinkLabel(modelData)
+                            color: Theme.surfaceText
+                            font.pixelSize: Theme.fontSizeMedium
+                            font.weight: root.isSinkActive(modelData) ? Font.Medium : Font.Normal
+                            elide: Text.ElideRight
+                        }
 
-                                // Cycle position badge
-                                Rectangle {
-                                    id: sinkBadgeItem
-                                    property int cycleIdx: root.sinkCycleIndex(modelData)
-                                    property int _force: root._badgeRefresh
-                                    visible: cycleIdx > 0
-                                    anchors.left: sinkIconItem.right
-                                    anchors.bottom: sinkIconItem.bottom
-                                    anchors.leftMargin: -8
-                                    anchors.bottomMargin: -2
-                                    width: 16
-                                    height: width
-                                    radius: width / 2
-                                    color: Theme.primary
-                                    border.width: 1
-                                    border.color: root.isSinkActive(modelData) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
-
-                                    StyledText {
-                                        anchors.horizontalCenter: parent.horizontalCenter
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        anchors.horizontalCenterOffset: -1
-                                        anchors.verticalCenterOffset: 1
-                                        text: String(parent.cycleIdx)
-                                        color: Theme.surfaceContainerHigh
-                                        font.pixelSize: 10
-                                        font.weight: Font.Bold
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-                                }
-
-                                MouseArea {
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.selectAudioOutput(modelData);
-                                        popout.closePopout();
-                                    }
-
-                                    StyledText {
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        anchors.leftMargin: Theme.iconSize + Theme.spacingM
-                                        anchors.rightMargin: 0
-                                        text: root.sinkLabel(modelData)
-                                        color: Theme.surfaceText
-                                        font.pixelSize: Theme.fontSizeMedium
-                                        font.weight: root.isSinkActive(modelData) ? Font.Medium : Font.Normal
-                                        elide: Text.ElideRight
-                                    }
-                                }
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.selectAudioOutput(modelData);
+                                popout.closePopout();
                             }
                         }
                     }
+                }
                 }
             }
     }
