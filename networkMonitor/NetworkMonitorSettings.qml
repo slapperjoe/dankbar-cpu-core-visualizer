@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Layouts
 import qs.Common
 import qs.Modules.Plugins
 import qs.Services
@@ -7,109 +6,176 @@ import qs.Widgets
 
 PluginSettings {
     id: root
-
     pluginId: "networkMonitor"
     title: "Network Monitor"
 
-    ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 8
-        spacing: 8
+    property int _probeMs: pluginData.numberSetting("probeInterval", 1000)
+    property string _colorMode: pluginData.stringSetting("colorMode", "vivid")
+    property int _chartH: pluginData.numberSetting("chartHeight", 80)
+    property int _pillW: pluginData.numberSetting("networkChartWidth", 80)
+    property int _hist: pluginData.numberSetting("historySize", 60)
+    property bool _grid: pluginData.boolSetting("showNetworkGrid", true)
+    property real _lw: pluginData.numberSetting("networkLineWidth", 2)
 
-        // ── Polling ───────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Polling"
+    readonly property var probeOptions: [500, 1000, 2000, 3000, 5000, 10000]
+    readonly property var chartHOptions: [40, 60, 80, 100, 120, 160, 200]
+    readonly property var pillWOptions: [40, 60, 80, 100, 120, 160, 200]
+    readonly property var histOptions: [10, 20, 30, 60, 90, 120]
+    readonly property var lwOptions: [1, 1.5, 2, 3, 4]
 
-            PluginSettingsRow {
-                title: "Probe Interval"
-                subtitle: "How often to request fresh network stats (ms)"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("probeInterval", 1000)
-                    min: 500
-                    max: 30000
-                    step: 500
-                    unit: "ms"
-                    onValueChanged: root.pluginData.setNumber("probeInterval", value)
-                }
+    function cycleProbe() {
+        const opts = root.probeOptions;
+        const idx = opts.indexOf(root._probeMs);
+        const next = idx >= 0 && idx < opts.length - 1 ? opts[idx + 1] : opts[0];
+        root._probeMs = next;
+        pluginData.setNumber("probeInterval", next);
+    }
+    function cycleChartH() {
+        const opts = root.chartHOptions;
+        const idx = opts.indexOf(root._chartH);
+        const next = idx >= 0 && idx < opts.length - 1 ? opts[idx + 1] : opts[0];
+        root._chartH = next;
+        pluginData.setNumber("chartHeight", next);
+    }
+    function cyclePillW() {
+        const opts = root.pillWOptions;
+        const idx = opts.indexOf(root._pillW);
+        const next = idx >= 0 && idx < opts.length - 1 ? opts[idx + 1] : opts[0];
+        root._pillW = next;
+        pluginData.setNumber("networkChartWidth", next);
+    }
+    function cycleHist() {
+        const opts = root.histOptions;
+        const idx = opts.indexOf(root._hist);
+        const next = idx >= 0 && idx < opts.length - 1 ? opts[idx + 1] : opts[0];
+        root._hist = next;
+        pluginData.setNumber("historySize", next);
+    }
+    function cycleLW() {
+        const opts = root.lwOptions;
+        const idx = opts.indexOf(root._lw);
+        const next = idx >= 0 && idx < opts.length - 1 ? opts[idx + 1] : opts[0];
+        root._lw = next;
+        pluginData.setNumber("networkLineWidth", next);
+    }
+
+    StyledText {
+        width: parent.width
+        text: "Network Monitor Settings"
+        font.pixelSize: Theme.fontSizeLarge
+        font.weight: Font.Bold
+        color: Theme.surfaceText
+    }
+
+    StyledText {
+        width: parent.width
+        text: "Tap any setting to cycle through values."
+        font.pixelSize: Theme.fontSizeSmall
+        color: Theme.surfaceVariantText
+        wrapMode: Text.WordWrap
+    }
+
+    Column {
+        width: parent.width
+        spacing: Theme.spacingS
+
+        // Probe Interval
+        SettingRow {
+            label: "Probe Interval"
+            valueText: root._probeMs + " ms"
+            onClicked: root.cycleProbe()
+        }
+
+        // Color Mode
+        SettingRow {
+            label: "Color Mode"
+            valueText: root._colorMode === "soft" ? "Soft" : "Vivid"
+            onClicked: {
+                root._colorMode = root._colorMode === "vivid" ? "soft" : "vivid";
+                pluginData.setString("colorMode", root._colorMode);
             }
         }
 
-        // ── Appearance ────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Appearance"
+        // Chart Height
+        SettingRow {
+            label: "Chart Height"
+            valueText: root._chartH + " px"
+            onClicked: root.cycleChartH()
+        }
 
-            PluginSettingsRow {
-                title: "Color Mode"
-                subtitle: "Vivid or soft palette for network chart"
-                control: PluginSettingsSelector {
-                    options: ["vivid", "soft"]
-                    selected: root.pluginData.stringSetting("colorMode", "vivid")
-                    onSelected: root.pluginData.setString("colorMode", selected)
-                }
+        // Pill Chart Width
+        SettingRow {
+            label: "Pill Chart Width"
+            valueText: root._pillW + " px"
+            onClicked: root.cyclePillW()
+        }
+
+        // History Size
+        SettingRow {
+            label: "History Size"
+            valueText: root._hist + " pts"
+            onClicked: root.cycleHist()
+        }
+
+        // Grid Lines
+        SettingRow {
+            label: "Grid Lines"
+            valueText: root._grid ? "Show" : "Hide"
+            onClicked: {
+                root._grid = !root._grid;
+                pluginData.setBool("showNetworkGrid", root._grid);
+            }
+        }
+
+        // Line Width
+        SettingRow {
+            label: "Line Width"
+            valueText: root._lw + " px"
+            onClicked: root.cycleLW()
+        }
+    }
+
+    component SettingRow: Rectangle {
+        property string label: ""
+        property string valueText: ""
+        signal clicked()
+
+        width: parent.width
+        height: 46
+        radius: Theme.cornerRadius
+        color: settingRowMouse.containsMouse ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+        border.width: 1
+        border.color: Theme.outline
+
+        Row {
+            anchors.fill: parent
+            anchors.margins: Theme.spacingM
+            spacing: Theme.spacingM
+
+            StyledText {
+                width: parent.width * 0.45
+                anchors.verticalCenter: parent.verticalCenter
+                text: label
+                color: Theme.surfaceText
+                font.pixelSize: Theme.fontSizeMedium
+                elide: Text.ElideRight
             }
 
-            PluginSettingsRow {
-                title: "Chart Height"
-                subtitle: "Height of the popout chart in pixels"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("chartHeight", 80)
-                    min: 40
-                    max: 200
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("chartHeight", value)
-                }
+            StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                text: valueText
+                color: Theme.primary
+                font.pixelSize: Theme.fontSizeMedium
+                font.weight: Font.Medium
             }
+        }
 
-            PluginSettingsRow {
-                title: "Pill Chart Width"
-                subtitle: "Width of the mini chart in the bar pill"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("networkChartWidth", 80)
-                    min: 40
-                    max: 200
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("networkChartWidth", value)
-                }
-            }
-
-            PluginSettingsRow {
-                title: "History Size"
-                subtitle: "Number of data points to keep in the rolling chart"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("historySize", 60)
-                    min: 10
-                    max: 120
-                    step: 1
-                    unit: "points"
-                    onValueChanged: root.pluginData.setNumber("historySize", value)
-                }
-            }
-            PluginSettingsRow {
-                title: "Grid Lines"
-                subtitle: "Show or hide horizontal grid lines on charts"
-                control: PluginSettingsSelector {
-                    options: ["Show", "Hide"]
-                    selected: root.pluginData.boolSetting("showNetworkGrid", true) ? "Show" : "Hide"
-                    onSelected: root.pluginData.setBool("showNetworkGrid", selected === "Show")
-                }
-            }
-
-            PluginSettingsRow {
-                title: "Line Width"
-                subtitle: "Stroke width for the chart lines"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("networkLineWidth", 2)
-                    min: 1
-                    max: 4
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("networkLineWidth", value)
-                }
-            }
+        MouseArea {
+            id: settingRowMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: parent.clicked()
         }
     }
 }

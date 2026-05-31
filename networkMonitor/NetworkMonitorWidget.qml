@@ -186,9 +186,9 @@ PluginComponent {
     // ── TextMetrics for stable label widths ─────────────────────
     TextMetrics {
         id: speedLabelMetrics
-        font.pixelSize: Math.max(8, root.overallTextSize())
+        font.pixelSize: Math.min(11, Math.max(7, root.overallTextSize() - 1))
         font.weight: Font.Medium
-        text: "888.8M"  // worst-case width template
+        text: "888.8M/s"  // worst-case width template
     }
 
     function overallTextSize() {
@@ -198,12 +198,13 @@ PluginComponent {
     }
 
     readonly property real barThickness: root.barConfig ? root.barConfig.thickness : 40
+    readonly property real pillFontSize: Math.min(11, Math.max(7, root.overallTextSize() - 1))
     readonly property real labelSlotWidth: Math.ceil(speedLabelMetrics.advanceWidth) + 6
     readonly property real arrowSlotWidth: Math.ceil(arrowMetrics.advanceWidth) + 2
 
     TextMetrics {
         id: arrowMetrics
-        font.pixelSize: Math.max(8, root.overallTextSize())
+        font.pixelSize: Math.min(11, Math.max(7, root.overallTextSize() - 1))
         font.weight: Font.Medium
         text: "↓"
     }
@@ -251,7 +252,7 @@ PluginComponent {
                         horizontalAlignment: Text.AlignRight
                         text: root.formatCompactSpeed(root.currentDownloadRate)
                         color: root.downloadColor
-                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.pixelSize: root.pillFontSize
                         font.weight: Font.Medium
                     }
                     StyledText {
@@ -261,7 +262,7 @@ PluginComponent {
                         anchors.verticalCenter: parent.verticalCenter
                         text: "↓"
                         color: root.downloadColor
-                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.pixelSize: root.pillFontSize
                         font.weight: Font.Medium
                     }
                 }
@@ -302,7 +303,7 @@ PluginComponent {
                         anchors.verticalCenter: parent.verticalCenter
                         text: "↑"
                         color: root.uploadColor
-                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.pixelSize: root.pillFontSize
                         font.weight: Font.Medium
                     }
                     StyledText {
@@ -313,7 +314,7 @@ PluginComponent {
                         anchors.verticalCenter: parent.verticalCenter
                         text: root.formatCompactSpeed(root.currentUploadRate)
                         color: root.uploadColor
-                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.pixelSize: root.pillFontSize
                         font.weight: Font.Medium
                     }
                 }
@@ -355,13 +356,13 @@ PluginComponent {
                     StyledText {
                         text: root.formatCompactSpeed(root.currentDownloadRate)
                         color: root.downloadColor
-                        font.pixelSize: Math.max(7, root.overallTextSize() - 1)
+                        font.pixelSize: root.pillFontSize - 1
                         font.weight: Font.Medium
                     }
                     StyledText {
                         text: "↓"
                         color: root.downloadColor
-                        font.pixelSize: Math.max(7, root.overallTextSize() - 1)
+                        font.pixelSize: root.pillFontSize - 1
                         font.weight: Font.Medium
                     }
                 }
@@ -397,13 +398,13 @@ PluginComponent {
                     StyledText {
                         text: "↑"
                         color: root.uploadColor
-                        font.pixelSize: Math.max(7, root.overallTextSize() - 1)
+                        font.pixelSize: root.pillFontSize - 1
                         font.weight: Font.Medium
                     }
                     StyledText {
                         text: root.formatCompactSpeed(root.currentUploadRate)
                         color: root.uploadColor
-                        font.pixelSize: Math.max(7, root.overallTextSize() - 1)
+                        font.pixelSize: root.pillFontSize - 1
                         font.weight: Font.Medium
                     }
                 }
