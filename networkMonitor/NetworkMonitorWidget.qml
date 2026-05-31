@@ -209,14 +209,7 @@ PluginComponent {
 
             Row {
                 id: hContentRow
-                spacing: -6
-
-                DankIcon {
-                    name: "wifi"
-                    size: Theme.iconSize - 6
-                    color: "#FFFFFF"
-                    filled: true
-                }
+                spacing: Theme.spacingS
 
                 // Download label
                 StyledText {
@@ -229,7 +222,7 @@ PluginComponent {
                 // Mini chart
                 Rectangle {
                     width: root.chartWidth
-                    height: Math.max(10, root.pillFontSize)
+                    height: root.pillFontSize
                     radius: 3
                     color: Theme.surfaceContainer
                     clip: true
@@ -276,14 +269,6 @@ PluginComponent {
                 id: vContentColumn
                 spacing: 1
 
-                DankIcon {
-                    name: "wifi"
-                    size: Theme.iconSize - 6
-                    color: "#FFFFFF"
-                    filled: true
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-
                 StyledText {
                     text: "↓" + root.formatCompactSpeed(root.currentDownloadRate)
                     color: root.downloadColor
@@ -294,7 +279,7 @@ PluginComponent {
 
                 Rectangle {
                     width: Math.max(24, root.chartWidth * 0.5)
-                    height: Math.max(16, root.pillFontSize * 2)
+                    height: Math.max(10, root.pillFontSize * 1.4)
                     anchors.horizontalCenter: parent.horizontalCenter
                     radius: 3
                     color: Theme.surfaceContainer
