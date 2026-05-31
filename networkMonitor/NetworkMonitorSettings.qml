@@ -9,7 +9,7 @@ PluginSettings {
     id: root
     pluginId: "networkMonitor"
 
-    property int _probeMs: pluginData.numberSetting("probeInterval", 1000)
+    property int _probeMs: pluginData["probeInterval"] !== undefined ? pluginData["probeInterval"] : 1000
 
     StyledText {
         width: parent.width
@@ -39,13 +39,13 @@ PluginSettings {
 
         Slider {
             width: parent.width
-            from: 500
-            to: 10000
-            stepSize: 500
+            from: 200
+            to: 2000
+            stepSize: 100
             value: root._probeMs
             onValueChanged: {
                 root._probeMs = value;
-                pluginData.setNumber("probeInterval", value);
+                pluginData["probeInterval"] = value;
             }
         }
     }

@@ -43,13 +43,13 @@ PluginComponent {
 
     // ── Settings load ──────────────────────────────────────────
     Component.onCompleted: {
-        root.probeIntervalMs = Math.max(500, Math.min(30000, Math.round(pluginData.numberSetting("probeInterval", 1000))));
-        root.colorMode = pluginData.stringSetting("colorMode", "vivid");
-        root.chartHeight = Math.max(40, Math.min(200, Math.round(pluginData.numberSetting("chartHeight", 80))));
-        root.historySize = Math.max(10, Math.min(120, Math.round(pluginData.numberSetting("historySize", 60))));
-        root.showGrid = pluginData.boolSetting("showNetworkGrid", true);
-        root.lineWidth = Math.max(1, Math.min(4, pluginData.numberSetting("networkLineWidth", 2)));
-        root.chartWidth = Math.max(40, Math.min(200, Math.round(pluginData.numberSetting("networkChartWidth", 80))));
+        root.probeIntervalMs = Math.max(200, Math.min(2000, Math.round(pluginData["probeInterval"] || 1000)));
+        root.colorMode = pluginData["colorMode"] || "vivid";
+        root.chartHeight = Math.max(40, Math.min(200, Math.round(pluginData["chartHeight"] || 80)));
+        root.historySize = Math.max(10, Math.min(120, Math.round(pluginData["historySize"] || 60)));
+        root.showGrid = pluginData["showNetworkGrid"] !== undefined ? pluginData["showNetworkGrid"] : true;
+        root.lineWidth = Math.max(1, Math.min(4, pluginData["networkLineWidth"] || 2));
+        root.chartWidth = Math.max(40, Math.min(200, Math.round(pluginData["networkChartWidth"] || 80)));
 
         DgopService.addRef(["network"]);
         root.downloadHistory = [];
@@ -190,9 +190,8 @@ PluginComponent {
     }
 
     readonly property real barThickness: root.barConfig ? root.barConfig.thickness : 40
-    readonly property real pillFontSize: Math.min(11, Math.max(7, root.overallTextSize() - 1))
 
-    // ── Bar Pill (compact) ─────────────────────────────────────
+    // ── Pill layouts ────────────────────────────────────────────
     horizontalBarPill: Component {
         MouseArea {
             implicitWidth: hContentRow.implicitWidth
@@ -209,26 +208,29 @@ PluginComponent {
 
             Row {
                 id: hContentRow
-                spacing: Theme.spacingS
+                spacing: 2
 
                 // Download label
                 StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
                     text: "↓ " + root.formatCompactSpeed(root.currentDownloadRate)
                     color: root.downloadColor
-                    font.pixelSize: root.pillFontSize
+                    font.pixelSize: Math.max(8, root.overallTextSize())
                     font.weight: Font.Medium
                 }
 
                 // Mini chart
                 Rectangle {
                     width: root.chartWidth
-                    height: root.pillFontSize
-                    radius: 3
+                    height: Math.max(12, root.barThickness - 8)
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: Math.min(4, height / 2)
                     color: Theme.surfaceContainer
                     clip: true
 
                     NetworkHistoryChart {
                         anchors.fill: parent
+                        anchors.margins: 2
                         downloadSeries: root.downloadHistory
                         uploadSeries: root.uploadHistory
                         downloadPeak: root.downloadPeak
@@ -242,9 +244,10 @@ PluginComponent {
 
                 // Upload label
                 StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
                     text: "↑ " + root.formatCompactSpeed(root.currentUploadRate)
                     color: root.uploadColor
-                    font.pixelSize: root.pillFontSize
+                    font.pixelSize: Math.max(8, root.overallTextSize())
                     font.weight: Font.Medium
                 }
             }
@@ -270,23 +273,24 @@ PluginComponent {
                 spacing: 1
 
                 StyledText {
+                    anchors.horizontalCenter: parent.horizontalCenter
                     text: "↓" + root.formatCompactSpeed(root.currentDownloadRate)
                     color: root.downloadColor
-                    font.pixelSize: root.pillFontSize - 1
+                    font.pixelSize: Math.max(7, root.overallTextSize() - 1)
                     font.weight: Font.Medium
-                    anchors.horizontalCenter: parent.horizontalCenter
                 }
 
                 Rectangle {
-                    width: Math.max(24, root.chartWidth * 0.5)
-                    height: Math.max(10, root.pillFontSize * 1.4)
+                    width: Math.max(24, root.chartWidth * 0.6)
+                    height: Math.max(30, root.barThickness * 1.2)
                     anchors.horizontalCenter: parent.horizontalCenter
-                    radius: 3
+                    radius: Math.min(4, width / 3)
                     color: Theme.surfaceContainer
                     clip: true
 
                     NetworkHistoryChart {
                         anchors.fill: parent
+                        anchors.margins: 2
                         downloadSeries: root.downloadHistory
                         uploadSeries: root.uploadHistory
                         downloadPeak: root.downloadPeak
@@ -299,11 +303,11 @@ PluginComponent {
                 }
 
                 StyledText {
+                    anchors.horizontalCenter: parent.horizontalCenter
                     text: "↑" + root.formatCompactSpeed(root.currentUploadRate)
                     color: root.uploadColor
-                    font.pixelSize: root.pillFontSize - 1
+                    font.pixelSize: Math.max(7, root.overallTextSize() - 1)
                     font.weight: Font.Medium
-                    anchors.horizontalCenter: parent.horizontalCenter
                 }
             }
         }
