@@ -71,10 +71,19 @@ PluginComponent {
             // If no active sink found, still update badges
             root.updateBarBadges();
         } else {
-            root.audioSinks = [];
-            root.quickSwitchSinks = [];
-            root.enabledSinks = [];
-            root.logToFile("AudioService not available");
+            // Fallback: if getAvailableSinks() fails, try to use the active sink
+            if (AudioService.sink && AudioService.sink.name) {
+                root.audioSinks = [AudioService.sink];
+                root.enabledSinks = [AudioService.sink.name];
+                root.quickSwitchSinks = [AudioService.sink];
+                root.activeSinkIndex = 0;
+                root.logToFile("Fallback: using active sink " + AudioService.sink.name);
+            } else {
+                root.audioSinks = [];
+                root.quickSwitchSinks = [];
+                root.enabledSinks = [];
+                root.logToFile("AudioService not available");
+            }
             root.updateBarBadges();
         }
         root.activeSinkIndex = 0;
@@ -379,20 +388,18 @@ PluginComponent {
             detailsText: "Left-click widget to cycle | Checkboxes control cycling pool"
             showCloseButton: true
 
-            Column {
-                id: contentColumn
+            ListView {
+                id: sinkListView
                 width: parent.width
-                spacing: Theme.spacingS
+                height: Math.max(0, root.audioSinks.length * 56)
+                model: root.audioSinks
+                clip: true
 
-                Repeater {
-                    model: root.audioSinks
-
-                    delegate: Rectangle {
-                        required property var sink
-                        width: parent.width
-                        height: 48
-                        radius: Theme.cornerRadius
-                        color: root.isSinkActive(sink) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+                delegate: Rectangle {
+                    width: parent.width
+                    height: 48
+                    radius: Theme.cornerRadius
+                    color: root.isSinkActive(modelData) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
                         Rectangle {
                             anchors.left: parent.left
@@ -400,8 +407,8 @@ PluginComponent {
                             width: parent.width
                             height: 2
                             radius: 1
-                            color: root.isSinkActive(parent.sink) ? Theme.primary : "transparent"
-                            visible: root.isSinkActive(parent.sink)
+                            color: root.isSinkActive(modelData) ? Theme.primary : "transparent"
+                            visible: root.isSinkActive(modelData)
                         }
 
                         Row {
@@ -417,17 +424,17 @@ PluginComponent {
                                 height: width
                                 radius: 3
                                 border.width: 1
-                                border.color: root.isSinkActive(parent.sink) ? Theme.primary : Theme.outline
-                                color: root.enabledSinks.includes(parent.sink.name) ? Theme.primary : "transparent"
+                                border.color: root.isSinkActive(modelData) ? Theme.primary : Theme.outline
+                                color: root.enabledSinks.includes(modelData.name) ? Theme.primary : "transparent"
 
                                 MouseArea {
                                     id: checkboxClick
                                     anchors.fill: parent
                                     hoverEnabled: true
-                                    enabled: !root.isSinkActive(parent.sink)
+                                    enabled: !root.isSinkActive(modelData)
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        root.toggleSinkEnabled(parent.sink);
+                                        root.toggleSinkEnabled(modelData);
                                     }
                                 }
 
@@ -439,7 +446,7 @@ PluginComponent {
                                     size: Theme.iconSize - 4
                                     color: "white"
                                     filled: true
-                                    visible: root.enabledSinks.includes(parent.sink.name)
+                                    visible: root.enabledSinks.includes(modelData.name)
                                 }
                             }
 
@@ -458,15 +465,15 @@ PluginComponent {
                                     id: sinkIconItem
                                     width: Theme.iconSize
                                     height: width
-                                    name: root.sinkIconName(parent.sink)
-                                    color: root.isSinkActive(parent.sink) ? Theme.primary : Theme.surfaceText
+                                    name: root.sinkIconName(modelData)
+                                    color: root.isSinkActive(modelData) ? Theme.primary : Theme.surfaceText
                                     filled: true
                                 }
 
                                 // Cycle position badge
                                 Rectangle {
                                     id: sinkBadgeItem
-                                    property int cycleIdx: root.sinkCycleIndex(parent.sink)
+                                    property int cycleIdx: root.sinkCycleIndex(modelData)
                                     property int _force: root._badgeRefresh
                                     visible: cycleIdx > 0
                                     anchors.left: sinkIconItem.right
@@ -478,7 +485,7 @@ PluginComponent {
                                     radius: width / 2
                                     color: Theme.primary
                                     border.width: 1
-                                    border.color: root.isSinkActive(parent.sink) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+                                    border.color: root.isSinkActive(modelData) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
                                     StyledText {
                                         anchors.horizontalCenter: parent.horizontalCenter
@@ -502,7 +509,7 @@ PluginComponent {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        root.selectAudioOutput(parent.sink);
+                                        root.selectAudioOutput(modelData);
                                         popout.closePopout();
                                     }
 
@@ -512,10 +519,10 @@ PluginComponent {
                                         anchors.verticalCenter: parent.verticalCenter
                                         anchors.leftMargin: Theme.iconSize + Theme.spacingM
                                         anchors.rightMargin: 0
-                                        text: root.sinkLabel(parent.sink)
+                                        text: root.sinkLabel(modelData)
                                         color: Theme.surfaceText
                                         font.pixelSize: Theme.fontSizeMedium
-                                        font.weight: root.isSinkActive(parent.sink) ? Font.Medium : Font.Normal
+                                        font.weight: root.isSinkActive(modelData) ? Font.Medium : Font.Normal
                                         elide: Text.ElideRight
                                     }
                                 }
@@ -524,9 +531,7 @@ PluginComponent {
                     }
                 }
             }
-        }
     }
-
     popoutWidth: 380
     popoutHeight: 0
 }
