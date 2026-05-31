@@ -74,6 +74,27 @@ PluginSettings {
                     onValueChanged: root.pluginData.setNumber("historySize", value)
                 }
             }
+            PluginSettingsRow {
+                title: "Grid Lines"
+                subtitle: "Show horizontal grid lines on the chart"
+                control: PluginSettingsToggle {
+                    checked: root.pluginData.boolSetting("showNetworkGrid", true)
+                    onToggled: root.pluginData.setBool("showNetworkGrid", checked)
+                }
+            }
+
+            PluginSettingsRow {
+                title: "Line Width"
+                subtitle: "Stroke width for the chart lines"
+                control: PluginSettingsSlider {
+                    value: root.pluginData.numberSetting("networkLineWidth", 2)
+                    min: 1
+                    max: 4
+                    step: 1
+                    unit: "px"
+                    onValueChanged: root.pluginData.setNumber("networkLineWidth", value)
+                }
+            }
         }
     }
 }
