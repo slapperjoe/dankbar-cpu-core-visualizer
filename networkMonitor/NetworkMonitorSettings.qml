@@ -51,7 +51,7 @@ PluginSettings {
 
             PluginSettingsRow {
                 title: "Chart Height"
-                subtitle: "Height of the network chart in pixels"
+                subtitle: "Height of the popout chart in pixels"
                 control: PluginSettingsSlider {
                     value: root.pluginData.numberSetting("chartHeight", 80)
                     min: 40
@@ -59,6 +59,19 @@ PluginSettings {
                     step: 1
                     unit: "px"
                     onValueChanged: root.pluginData.setNumber("chartHeight", value)
+                }
+            }
+
+            PluginSettingsRow {
+                title: "Pill Chart Width"
+                subtitle: "Width of the mini chart in the bar pill"
+                control: PluginSettingsSlider {
+                    value: root.pluginData.numberSetting("networkChartWidth", 80)
+                    min: 40
+                    max: 200
+                    step: 1
+                    unit: "px"
+                    onValueChanged: root.pluginData.setNumber("networkChartWidth", value)
                 }
             }
 

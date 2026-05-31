@@ -17,6 +17,7 @@ PluginComponent {
     property int historySize: 60
     property bool showGrid: true
     property real lineWidth: 2
+    property int chartWidth: 80
     property int _chartRefresh: 0
 
     // ── Derived properties ─────────────────────────────────────
@@ -48,6 +49,7 @@ PluginComponent {
         root.historySize = Math.max(10, Math.min(120, Math.round(pluginData.numberSetting("historySize", 60))));
         root.showGrid = pluginData.boolSetting("showNetworkGrid", true);
         root.lineWidth = Math.max(1, Math.min(4, pluginData.numberSetting("networkLineWidth", 2)));
+        root.chartWidth = Math.max(40, Math.min(200, Math.round(pluginData.numberSetting("networkChartWidth", 80))));
 
         DgopService.addRef(["network"]);
         root.downloadHistory = [];
@@ -179,6 +181,31 @@ PluginComponent {
         }
     }
 
+    // ── TextMetrics for stable label widths ─────────────────────
+    TextMetrics {
+        id: speedLabelMetrics
+        font.pixelSize: Math.max(8, root.overallTextSize())
+        font.weight: Font.Medium
+        text: "888.8M"  // worst-case width template
+    }
+
+    function overallTextSize() {
+        const fontScale = root.barConfig ? root.barConfig.fontScale : undefined;
+        const maximizeText = root.barConfig ? root.barConfig.maximizeWidgetText : undefined;
+        return Theme.barTextSize(root.barThickness, fontScale, maximizeText);
+    }
+
+    readonly property real barThickness: root.barConfig ? root.barConfig.thickness : 40
+    readonly property real labelSlotWidth: Math.ceil(speedLabelMetrics.advanceWidth) + 6
+    readonly property real arrowSlotWidth: Math.ceil(arrowMetrics.advanceWidth) + 2
+
+    TextMetrics {
+        id: arrowMetrics
+        font.pixelSize: Math.max(8, root.overallTextSize())
+        font.weight: Font.Medium
+        text: "↓"
+    }
+
     // ── Bar Pill (compact) ─────────────────────────────────────
     horizontalBarPill: Component {
         MouseArea {
@@ -196,7 +223,7 @@ PluginComponent {
 
             Row {
                 id: hContentRow
-                spacing: 4
+                spacing: 2
 
                 DankIcon {
                     id: barIcon
@@ -207,20 +234,84 @@ PluginComponent {
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
-                Column {
+                // Download label
+                Item {
+                    width: root.labelSlotWidth + 2
+                    height: hDownloadArrowText.implicitHeight
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 0
 
                     StyledText {
-                        text: "↓ " + root.formatCompactSpeed(root.currentDownloadRate)
+                        id: hDownloadSpeedText
+                        anchors.left: parent.left
+                        anchors.right: hDownloadArrowText.left
+                        anchors.rightMargin: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                        horizontalAlignment: Text.AlignRight
+                        text: root.formatCompactSpeed(root.currentDownloadRate)
                         color: root.downloadColor
-                        font.pixelSize: Math.max(8, Theme.fontSizeSmall - 1)
+                        font.pixelSize: Math.max(8, root.overallTextSize())
                         font.weight: Font.Medium
                     }
                     StyledText {
-                        text: "↑ " + root.formatCompactSpeed(root.currentUploadRate)
+                        id: hDownloadArrowText
+                        width: root.arrowSlotWidth
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "↓"
+                        color: root.downloadColor
+                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.weight: Font.Medium
+                    }
+                }
+
+                // Mini chart
+                Rectangle {
+                    width: root.chartWidth
+                    height: Math.max(12, root.barThickness - 8)
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: Math.min(4, height / 2)
+                    color: Theme.surfaceContainer
+                    clip: true
+
+                    NetworkHistoryChart {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        downloadSeries: root.downloadHistory
+                        uploadSeries: root.uploadHistory
+                        downloadPeak: root.downloadPeak
+                        uploadPeak: root.uploadPeak
+                        downloadColor: root.downloadColor
+                        uploadColor: root.uploadColor
+                        strokeWidth: Math.max(1, root.lineWidth - 0.5)
+                        gridVisible: false
+                    }
+                }
+
+                // Upload label
+                Item {
+                    width: root.labelSlotWidth + 2
+                    height: hUploadSpeedText.implicitHeight
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    StyledText {
+                        id: hUploadArrowText
+                        width: root.arrowSlotWidth
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "↑"
                         color: root.uploadColor
-                        font.pixelSize: Math.max(8, Theme.fontSizeSmall - 1)
+                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.weight: Font.Medium
+                    }
+                    StyledText {
+                        id: hUploadSpeedText
+                        anchors.left: hUploadArrowText.right
+                        anchors.leftMargin: 1
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.formatCompactSpeed(root.currentUploadRate)
+                        color: root.uploadColor
+                        font.pixelSize: Math.max(8, root.overallTextSize())
                         font.weight: Font.Medium
                     }
                 }
@@ -244,7 +335,7 @@ PluginComponent {
 
             Column {
                 id: vContentColumn
-                spacing: 2
+                spacing: 1
 
                 DankIcon {
                     name: "network"
@@ -254,19 +345,65 @@ PluginComponent {
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
 
-                StyledText {
-                    text: "↓" + root.formatCompactSpeed(root.currentDownloadRate)
-                    color: root.downloadColor
-                    font.pixelSize: Math.max(7, Theme.fontSizeSmall - 2)
-                    font.weight: Font.Medium
+                // Download label
+                Row {
                     anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 1
+
+                    StyledText {
+                        text: root.formatCompactSpeed(root.currentDownloadRate)
+                        color: root.downloadColor
+                        font.pixelSize: Math.max(7, root.overallTextSize() - 1)
+                        font.weight: Font.Medium
+                    }
+                    StyledText {
+                        text: "↓"
+                        color: root.downloadColor
+                        font.pixelSize: Math.max(7, root.overallTextSize() - 1)
+                        font.weight: Font.Medium
+                    }
                 }
-                StyledText {
-                    text: "↑" + root.formatCompactSpeed(root.currentUploadRate)
-                    color: root.uploadColor
-                    font.pixelSize: Math.max(7, Theme.fontSizeSmall - 2)
-                    font.weight: Font.Medium
+
+                // Mini chart
+                Rectangle {
+                    width: Math.max(24, root.chartWidth * 0.6)
+                    height: Math.max(30, root.barThickness * 1.2)
                     anchors.horizontalCenter: parent.horizontalCenter
+                    radius: Math.min(4, width / 3)
+                    color: Theme.surfaceContainer
+                    clip: true
+
+                    NetworkHistoryChart {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        downloadSeries: root.downloadHistory
+                        uploadSeries: root.uploadHistory
+                        downloadPeak: root.downloadPeak
+                        uploadPeak: root.uploadPeak
+                        downloadColor: root.downloadColor
+                        uploadColor: root.uploadColor
+                        strokeWidth: Math.max(1, root.lineWidth - 0.5)
+                        gridVisible: false
+                    }
+                }
+
+                // Upload label
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 1
+
+                    StyledText {
+                        text: "↑"
+                        color: root.uploadColor
+                        font.pixelSize: Math.max(7, root.overallTextSize() - 1)
+                        font.weight: Font.Medium
+                    }
+                    StyledText {
+                        text: root.formatCompactSpeed(root.currentUploadRate)
+                        color: root.uploadColor
+                        font.pixelSize: Math.max(7, root.overallTextSize() - 1)
+                        font.weight: Font.Medium
+                    }
                 }
             }
         }
