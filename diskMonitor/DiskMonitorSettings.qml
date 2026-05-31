@@ -93,7 +93,7 @@ PluginSettings {
                         spacing: 6
 
                         StyledText {
-                            text: parent.mountPath
+                            text: parent.mountPath || "unknown"
                             color: Theme.onPrimaryContainer
                             font.pixelSize: Theme.fontSizeSmall
                             font.weight: Font.Medium
@@ -119,11 +119,9 @@ PluginSettings {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    var idx = root.selectedMountPaths.indexOf(modelData);
-                                    if (idx !== -1) {
-                                        root.selectedMountPaths.splice(idx, 1);
-                                        root.saveValue("selectedDiskMountPaths", root.selectedMountPaths);
-                                    }
+                                    var copy = root.selectedMountPaths.filter(function(p) { return p !== modelData; });
+                                    root.selectedMountPaths = copy;
+                                    root.saveValue("selectedDiskMountPaths", copy);
                                 }
                             }
                         }
@@ -136,13 +134,17 @@ PluginSettings {
     // Load saved mount list when settings component is ready
     Component.onCompleted: {
         var loaded = root.loadValue("selectedDiskMountPaths", ["/"]);
-        root.selectedMountPaths = loaded.filter(function(p) {
-            if (!p || p.trim().length === 0) return false;
-            if (p.indexOf("//") !== -1) return false;
+        var valid = loaded.filter(function(p) {
+            if (p === undefined || p === null) return false;
+            var str = String(p);
+            if (str.trim().length === 0) return false;
+            if (str.indexOf("//") !== -1) return false;
             return true;
         });
-        if (root.selectedMountPaths.length === 0) {
+        if (valid.length === 0) {
             root.selectedMountPaths = ["/"];
+        } else {
+            root.selectedMountPaths = valid;
         }
     }
 
@@ -164,9 +166,13 @@ PluginSettings {
         function onValueChanged() {
             const val = addMountPicker.value;
             if (val && val !== "" && val.indexOf("//") === -1) {
-                root.selectedMountPaths.push(val);
-                root.saveValue("selectedDiskMountPaths", root.selectedMountPaths);
-                // Reset picker to empty
+                // Avoid duplicates
+                if (root.selectedMountPaths.indexOf(val) === -1) {
+                    var copy = root.selectedMountPaths.slice();
+                    copy.push(val);
+                    root.selectedMountPaths = copy;
+                    root.saveValue("selectedDiskMountPaths", copy);
+                }
                 addMountPicker.value = "";
             }
         }
