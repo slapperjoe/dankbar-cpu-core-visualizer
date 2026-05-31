@@ -167,7 +167,14 @@ PluginComponent {
         root.popoutTriggerMode = pluginData["popoutTriggerMode"] || "click";
         var storedPaths = pluginData["selectedDiskMountPaths"];
         if (Array.isArray(storedPaths) && storedPaths.length > 0) {
-            root.selectedDiskMountPaths = storedPaths;
+            // Clean up invalid paths like "//", "///", etc.
+            var validPaths = storedPaths.filter(function(p) {
+                if (!p || p.trim().length === 0) return false;
+                // Reject paths with multiple consecutive slashes (artifacts of the old bug)
+                if (p.indexOf("//") !== -1) return false;
+                return true;
+            });
+            root.selectedDiskMountPaths = validPaths.length > 0 ? validPaths : ["/"];
         } else {
             root.selectedDiskMountPaths = ["/"];
         }
@@ -207,8 +214,13 @@ PluginComponent {
     function diskMountHasUsage(mount) {
         if (!mount)
             return false;
-        // dgop always provides percent, so just check it exists
-        return mount.percent !== undefined && mount.percent !== null;
+        // dgop may provide percent, or just size/used
+        if (mount.percent !== undefined && mount.percent !== null)
+            return true;
+        // Fallback: if size or used is present, consider it valid
+        if (mount.size || mount.used)
+            return true;
+        return false;
     }
 
     function parseStorage(str) {
@@ -288,15 +300,14 @@ PluginComponent {
         return Math.round(root.diskUsageValue);
     }
 
-    property real barThickness: 40
-
     horizontalBarPill: Component {
         MouseArea {
             id: hMouseArea
-            implicitWidth: hContentRow.implicitWidth
-            implicitHeight: hContentRow.implicitHeight
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+            // Size to fit content + padding
+            implicitWidth: hContentRow.implicitWidth + 24
+            implicitHeight: root.barThickness
 
             onEntered: {
                 if (root.popoutTriggerMode === "hover")
@@ -313,6 +324,7 @@ PluginComponent {
 
             Row {
                 id: hContentRow
+                anchors.centerIn: parent
                 spacing: -6
 
                 DankIcon {
@@ -354,10 +366,10 @@ PluginComponent {
     verticalBarPill: Component {
         MouseArea {
             id: vMouseArea
-            implicitWidth: vContentRow.implicitWidth
-            implicitHeight: vContentRow.implicitHeight
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+            implicitWidth: vContentRow.implicitWidth + 24
+            implicitHeight: root.barThickness
 
             onEntered: {
                 if (root.popoutTriggerMode === "hover")
@@ -374,6 +386,7 @@ PluginComponent {
 
             Row {
                 id: vContentRow
+                anchors.centerIn: parent
                 spacing: -6
 
                 DankIcon {
@@ -423,17 +436,20 @@ PluginComponent {
         root.openPopout();
     }
 
+    property var _popoutInstance: null
+
     function openPopout() {
-        var popout = null;
-        for (var i = 0; i < root.children.length; i++) {
-            var child = root.children[i];
-            if (typeof child.setTriggerPosition === "function") {
-                popout = child;
-                break;
+        // Use PluginComponent's showPopout if available
+        if (typeof root.showPopout === "function") {
+            root.showPopout(root.popoutContent);
+        } else if (!root._popoutInstance || !root._popoutInstance.visible) {
+            var popout = root.popoutContent.createObject(root, {"parent": root});
+            if (popout) {
+                root._popoutInstance = popout;
+                popout.show();
             }
-        }
-        if (popout) {
-            popout.toggle();
+        } else {
+            root._popoutInstance.toggle();
         }
     }
 

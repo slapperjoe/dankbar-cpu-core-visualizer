@@ -41,20 +41,117 @@ PluginSettings {
         return options;
     }
 
-    // Selected mounts list (display with remove buttons)
-    ListSetting {
-        id: mountList
-        settingKey: "selectedDiskMountPaths"
-        label: "Monitored Mounts"
-        description: "Currently selected disk mounts"
-        defaultValue: ["/"]
-        delegate: listDelegate
+    // ── Selected mounts as pills ─────────────────────────
+    property var selectedMountPaths: []
+
+    Column {
+        width: parent.width
+        spacing: Theme.spacingS
+
+        StyledText {
+            width: parent.width
+            text: "Monitored Mounts"
+            font.pixelSize: Theme.fontSizeSmall
+            font.weight: Font.Medium
+            color: Theme.surfaceVariantText
+        }
+
+        StyledText {
+            width: parent.width
+            text: "Pick a mount to add (above), click X to remove"
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.surfaceVariantText
+            wrapMode: Text.WordWrap
+        }
+
+        // Pill container
+        Flow {
+            id: mountPillsContainer
+            width: parent.width
+            height: 60
+            clip: true
+            spacing: Theme.spacingXS
+
+            Repeater {
+                id: mountPillsRepeater
+                model: root.selectedMountPaths
+
+                delegate: Rectangle {
+                    property string mountPath: modelData
+                    width: pillRow.implicitWidth + 32
+                    height: 36
+                    radius: 18
+                    color: Theme.primaryContainer
+                    border.width: 1
+                    border.color: Theme.withAlpha(Theme.primary, 0.3)
+
+                    Row {
+                        id: pillRow
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        spacing: 6
+
+                        StyledText {
+                            text: parent.mountPath
+                            color: Theme.onPrimaryContainer
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.weight: Font.Medium
+                        }
+
+                        // Remove button
+                        Rectangle {
+                            width: 24
+                            height: 24
+                            radius: 12
+                            color: pillRemoveArea.containsMouse ? Theme.errorContainer : "transparent"
+
+                            DankIcon {
+                                anchors.centerIn: parent
+                                name: "close"
+                                size: 14
+                                color: Theme.onErrorContainer
+                            }
+
+                            MouseArea {
+                                id: pillRemoveArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    var idx = root.selectedMountPaths.indexOf(modelData);
+                                    if (idx !== -1) {
+                                        root.selectedMountPaths.splice(idx, 1);
+                                        root.saveValue("selectedDiskMountPaths", root.selectedMountPaths);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+
+    // Load saved mount list when settings component is ready
+    Component.onCompleted: {
+        var loaded = root.loadValue("selectedDiskMountPaths", ["/"]);
+        root.selectedMountPaths = loaded.filter(function(p) {
+            if (!p || p.trim().length === 0) return false;
+            if (p.indexOf("//") !== -1) return false;
+            return true;
+        });
+        if (root.selectedMountPaths.length === 0) {
+            root.selectedMountPaths = ["/"];
+        }
+    }
+
+
 
     // Add mount dropdown
     SelectionSetting {
         id: addMountPicker
-        settingKey: "selectedDiskMountPath"
+        settingKey: ""
         label: "Add Disk Mount"
         description: "Pick a mount to add to the monitored list"
         options: root.diskMountOptions
@@ -66,53 +163,16 @@ PluginSettings {
         target: addMountPicker
         function onValueChanged() {
             const val = addMountPicker.value;
-            if (val && val !== "") {
-                mountList.addItem(val);
+            if (val && val !== "" && val.indexOf("//") === -1) {
+                root.selectedMountPaths.push(val);
+                root.saveValue("selectedDiskMountPaths", root.selectedMountPaths);
                 // Reset picker to empty
                 addMountPicker.value = "";
             }
         }
     }
 
-    Component {
-        id: listDelegate
-        Row {
-            width: parent.width
-            height: 40
-            spacing: Theme.spacingM
 
-            StyledText {
-                text: modelData
-                color: Theme.surfaceText
-                font.pixelSize: Theme.fontSizeSmall
-                font.weight: Font.Medium
-            }
-
-            Rectangle {
-                width: 60
-                height: 28
-                color: removeArea.containsMouse ? Theme.errorHover : Theme.error
-                radius: Theme.cornerRadius
-
-                StyledText {
-                    anchors.centerIn: parent
-                    text: "Remove"
-                    color: Theme.errorText
-                    font.pixelSize: Theme.fontSizeSmall
-                }
-
-                MouseArea {
-                    id: removeArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        mountList.removeItem(index)
-                    }
-                }
-            }
-        }
-    }
 
     // ── Polling ───────────────────────────────────────
     SliderSetting {
