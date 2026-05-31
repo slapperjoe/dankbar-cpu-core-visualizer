@@ -158,11 +158,11 @@ PluginComponent {
 
     function _applyPluginData() {
         root.colorMode = pluginData["colorMode"] || "vivid";
-        root.barWidth = Math.max(8, Math.min(80, Number(pluginData["barWidth"]) || 24);
-        root.barGap = Math.max(1, Math.min(20, Number(pluginData["barGap"]) || 4);
-        root.smoothingPercent = Math.max(1, Math.min(99, Number(pluginData["smoothingPercent"]) || 15);
-        root.cornerRadius = Math.max(2, Math.min(20, Number(pluginData["cornerRadius"]) || 6);
-        root.probeInterval = Math.max(500, Math.min(30000, Number(pluginData["probeInterval"]) || 3000);
+        root.barWidth = Math.max(8, Math.min(80, Number(pluginData["barWidth"]) || 24));
+        root.barGap = Math.max(1, Math.min(20, Number(pluginData["barGap"]) || 4));
+        root.smoothingPercent = Math.max(1, Math.min(99, Number(pluginData["smoothingPercent"]) || 15));
+        root.cornerRadius = Math.max(2, Math.min(20, Number(pluginData["cornerRadius"]) || 6));
+        root.probeInterval = Math.max(500, Math.min(30000, Number(pluginData["probeInterval"]) || 3000));
         root.probeIntervalMs = root.probeInterval;
         root.popoutTriggerMode = pluginData["popoutTriggerMode"] || "click";
         var storedPaths = pluginData["selectedDiskMountPaths"];
