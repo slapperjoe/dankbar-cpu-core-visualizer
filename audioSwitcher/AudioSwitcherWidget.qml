@@ -15,8 +15,8 @@ PluginComponent {
     property var quickSwitchSinks: []
     property var enabledSinks: []
     property int _badgeRefresh: 0
-    property int barThickness: 32
-    property int widgetThickness: 32
+    readonly property real barThickness: root.barConfig ? root.barConfig.thickness : 40
+    readonly property real widgetThickness: root.barConfig ? root.barThickness : 40
 
     property string currentDeviceName: {
         var sink = root.lastSelectedSink || AudioService.sink;
@@ -220,49 +220,47 @@ PluginComponent {
 
     // ── Bar Widget (icon-only, no text) ─────────────────────
     horizontalBarPill: Component {
-        Rectangle {
+        Item {
             implicitWidth: root.barThickness
             implicitHeight: root.widgetThickness
-            radius: Theme.cornerRadius
-            color: Theme.surfaceContainerHigh
 
-            DankIcon {
-                id: barIcon
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.right: barBadge.left
-                anchors.rightMargin: 4
-                name: root.currentDeviceIcon
-                size: Math.min(parent.height - 12, Theme.iconSize + 2)
-                color: Theme.widgetTextColor
-                filled: true
-            }
+                spacing: -6
 
-            Rectangle {
-                id: barBadge
-                property int _force: root._badgeRefresh
-                visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.rightMargin: 4
-                width: 16
-                height: width
-                radius: width / 2
-                color: Theme.primary
-                border.width: 1
-                border.color: Theme.surfaceContainerHigh
+                DankIcon {
+                    id: barIcon
+                    name: root.currentDeviceIcon
+                    size: Math.min(parent.parent.height - 8, Theme.iconSize - 2)
+                    color: "#FFFFFF"
+                    filled: true
+                }
 
-                StyledText {
-                    property int _force: parent._force
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenterOffset: -1
-                    anchors.verticalCenterOffset: 1
-                    text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
-                    color: Theme.surfaceContainerHigh
-                    font.pixelSize: 10
-                    font.weight: Font.Bold
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                Rectangle {
+                    id: barBadge
+                    property int _force: root._badgeRefresh
+                    visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
+                    width: 14
+                    height: width
+                    radius: width / 2
+                    color: Theme.primary
+                    border.width: 1
+                    border.color: Theme.surfaceContainerHigh
+
+                    StyledText {
+                        property int _force: parent._force
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.horizontalCenterOffset: -1
+                        anchors.verticalCenterOffset: 1
+                        text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
+                        color: Theme.surfaceContainerHigh
+                        font.pixelSize: 10
+                        font.weight: Font.Bold
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                 }
             }
 
@@ -279,49 +277,47 @@ PluginComponent {
     }
 
     verticalBarPill: Component {
-        Rectangle {
+        Item {
             implicitWidth: root.barThickness
             implicitHeight: root.widgetThickness
-            radius: Theme.cornerRadius
-            color: Theme.surfaceContainerHigh
 
-            DankIcon {
-                id: vBarIcon
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.right: vBarBadge.left
-                anchors.rightMargin: 4
-                name: root.currentDeviceIcon
-                size: Math.min(parent.height - 12, Theme.iconSize + 2)
-                color: Theme.widgetTextColor
-                filled: true
-            }
+                spacing: -6
 
-            Rectangle {
-                id: vBarBadge
-                property int _force: root._badgeRefresh
-                visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.rightMargin: 4
-                width: 16
-                height: width
-                radius: width / 2
-                color: Theme.primary
-                border.width: 1
-                border.color: Theme.surfaceContainerHigh
+                DankIcon {
+                    id: vBarIcon
+                    name: root.currentDeviceIcon
+                    size: Math.min(parent.parent.height - 8, Theme.iconSize - 2)
+                    color: "#FFFFFF"
+                    filled: true
+                }
 
-                StyledText {
-                    property int _force: parent._force
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenterOffset: -1
-                    anchors.verticalCenterOffset: 1
-                    text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
-                    color: Theme.surfaceContainerHigh
-                    font.pixelSize: 10
-                    font.weight: Font.Bold
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                Rectangle {
+                    id: vBarBadge
+                    property int _force: root._badgeRefresh
+                    visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
+                    width: 14
+                    height: width
+                    radius: width / 2
+                    color: Theme.primary
+                    border.width: 1
+                    border.color: Theme.surfaceContainerHigh
+
+                    StyledText {
+                        property int _force: parent._force
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.horizontalCenterOffset: -1
+                        anchors.verticalCenterOffset: 1
+                        text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
+                        color: Theme.surfaceContainerHigh
+                        font.pixelSize: 10
+                        font.weight: Font.Bold
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                 }
             }
 

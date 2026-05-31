@@ -42,6 +42,10 @@ PluginSettings {
 
     property bool sinksLoaded: root.audioSinks.length > 0
 
+    function sinkLabel(sink) {
+        return AudioService.displayName(sink) || sink.description || sink.name;
+    }
+
     function isSinkActive(sink) {
         if (!sink) return false;
         var current = AudioService.sink;
@@ -88,12 +92,20 @@ PluginSettings {
             delegate: Rectangle {
                 property var sink: modelData
                 property bool isActive: root.isSinkActive(sink)
-                property bool isEnabled: root.enabledSinks.includes(sink.name)
                 width: parent.width
                 height: 48
                 radius: Theme.cornerRadius
                 opacity: isActive ? 0.5 : 1.0
-                color: isEnabled ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+                color: root.enabledSinks.includes(sink.name) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (parent.isActive) return;
+                        root.toggleSink(parent.sink.name);
+                    }
+                }
 
                 Row {
                     anchors.fill: parent
@@ -106,16 +118,7 @@ PluginSettings {
                         radius: 3
                         border.width: 1
                         border.color: Theme.outline
-                        color: parent.isEnabled ? Theme.primary : "transparent"
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (parent.isActive) return;
-                                root.toggleSink(parent.sink.name);
-                            }
-                        }
+                        color: root.enabledSinks.includes(sink.name) ? Theme.primary : "transparent"
 
                         DankIcon {
                             anchors.centerIn: parent
@@ -123,19 +126,18 @@ PluginSettings {
                             size: Theme.iconSize - 4
                             color: "white"
                             filled: true
-                            visible: parent.isEnabled
+                            visible: root.enabledSinks.includes(sink.name)
                         }
                     }
 
                     StyledText {
-                        width: parent.width - (Theme.iconSize + Theme.spacingM)
                         anchors.left: parent.left
+                        anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.leftMargin: Theme.iconSize + Theme.spacingM
-                        text: AudioService.displayName(parent.sink) || parent.sink.description || parent.sink.name
-                        color: parent.isEnabled ? Theme.primary : Theme.surfaceText
-                        font.weight: parent.isEnabled ? Font.Medium : Font.Normal
-                        elide: Text.ElideRight
+                        text: root.sinkLabel(sink)
+                        color: root.enabledSinks.includes(sink.name) ? Theme.primary : Theme.surfaceText
+                        font.weight: root.enabledSinks.includes(sink.name) ? Font.Medium : Font.Normal
                     }
                 }
             }
