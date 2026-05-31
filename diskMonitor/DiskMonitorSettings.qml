@@ -27,12 +27,91 @@ PluginSettings {
     }
 
     // ── Disk Mounts ────────────────────────────────────
+    readonly property var diskMountList: Array.isArray(DgopService.diskMounts) ? DgopService.diskMounts : []
+
+    readonly property var diskMountOptions: {
+        let options = [];
+        if (!Array.isArray(root.diskMountList) || root.diskMountList.length <= 0)
+            return [{ label: "No disk stats available", value: "/" }];
+        for (let i = 0; i < root.diskMountList.length; i++) {
+            const mount = root.diskMountList[i];
+            const path = mount.mount || mount.device || "/";
+            options.push({ label: path, value: path });
+        }
+        return options;
+    }
+
+    // Selected mounts list (display with remove buttons)
+    ListSetting {
+        id: mountList
+        settingKey: "selectedDiskMountPaths"
+        label: "Monitored Mounts"
+        description: "Currently selected disk mounts"
+        defaultValue: ["/"]
+        delegate: listDelegate
+    }
+
+    // Add mount dropdown
     SelectionSetting {
+        id: addMountPicker
         settingKey: "selectedDiskMountPath"
-        label: "Disk Mount"
-        description: "Choose which disk mount to monitor"
+        label: "Add Disk Mount"
+        description: "Pick a mount to add to the monitored list"
         options: root.diskMountOptions
-        defaultValue: "/"
+        defaultValue: ""
+    }
+
+    // When a new mount is picked, add it to the list
+    Connections {
+        target: addMountPicker
+        function onValueChanged() {
+            const val = addMountPicker.value;
+            if (val && val !== "") {
+                mountList.addItem(val);
+                // Reset picker to empty
+                addMountPicker.value = "";
+            }
+        }
+    }
+
+    Component {
+        id: listDelegate
+        Row {
+            width: parent.width
+            height: 40
+            spacing: Theme.spacingM
+
+            StyledText {
+                text: modelData
+                color: Theme.surfaceText
+                font.pixelSize: Theme.fontSizeSmall
+                font.weight: Font.Medium
+            }
+
+            Rectangle {
+                width: 60
+                height: 28
+                color: removeArea.containsMouse ? Theme.errorHover : Theme.error
+                radius: Theme.cornerRadius
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: "Remove"
+                    color: Theme.errorText
+                    font.pixelSize: Theme.fontSizeSmall
+                }
+
+                MouseArea {
+                    id: removeArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        mountList.removeItem(index)
+                    }
+                }
+            }
+        }
     }
 
     // ── Polling ───────────────────────────────────────
@@ -103,20 +182,5 @@ PluginSettings {
         minimum: 1
         maximum: 99
         unit: "%"
-    }
-
-    // Dynamically build disk mount options from DgopService
-    readonly property var diskMountList: Array.isArray(DgopService.diskMounts) ? DgopService.diskMounts : []
-
-    readonly property var diskMountOptions: {
-        let options = [];
-        if (!Array.isArray(root.diskMountList) || root.diskMountList.length <= 0)
-            return [{ label: "No disk stats available", value: "/" }];
-        for (let i = 0; i < root.diskMountList.length; i++) {
-            const mount = root.diskMountList[i];
-            const path = mount.mount || mount.device || "/";
-            options.push({ label: path, value: path });
-        }
-        return options;
     }
 }

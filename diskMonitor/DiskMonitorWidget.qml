@@ -152,9 +152,9 @@ PluginComponent {
         root.barWidth = Math.max(8, Math.min(80, root.barWidth));
         root.barGap = Math.max(1, Math.min(20, root.barGap));
         root.cornerRadius = Math.max(2, Math.min(20, Number(pluginData["cornerRadius"]) || 6));
-        var storedPath = pluginData["selectedDiskMountPath"];
-        if (storedPath && String(storedPath).length > 0) {
-            root.selectedDiskMountPaths = [storedPath];
+        var storedPaths = pluginData["selectedDiskMountPaths"];
+        if (Array.isArray(storedPaths) && storedPaths.length > 0) {
+            root.selectedDiskMountPaths = storedPaths;
         } else {
             root.selectedDiskMountPaths = ["/"];
         }
