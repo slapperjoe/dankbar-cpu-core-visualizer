@@ -530,7 +530,7 @@ PluginComponent {
             // End of Column
         }
     }
+}
     popoutWidth: 380
     popoutHeight: 0
-}
 }
