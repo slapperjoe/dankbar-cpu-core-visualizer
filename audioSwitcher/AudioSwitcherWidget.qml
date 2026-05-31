@@ -15,6 +15,7 @@ PluginComponent {
     property var quickSwitchSinks: []
     property var enabledSinks: []
     property int _badgeRefresh: 0
+    property int currentVolume: 50
     // barThickness and widgetThickness are inherited from PluginComponent
     // (barThickness: 48, widgetThickness: 30)
 
@@ -104,7 +105,7 @@ PluginComponent {
         function onSinkChanged() {
             root.lastSelectedSink = AudioService.sink;
             root.updateBarBadges();
-            root.updateVolumeSlider();
+            root.updateCurrentVolume();
         }
     }
 
@@ -112,18 +113,17 @@ PluginComponent {
         root.logToFile("[AudioSwitcher] Loading plugin...");
         root.refreshAudioSinks();
         root.logToFile("[AudioSwitcher] Loaded");
+        root.updateCurrentVolume();
     }
 
     Component.onDestruction: {
         refreshTimer.running = false;
     }
 
-    function updateVolumeSlider() {
+    function updateCurrentVolume() {
         var sink = root.lastSelectedSink || AudioService.sink;
-        if (popout.volumeSlider) {
-            if (sink && sink.audio && sink.audio.volume !== undefined) {
-                popout.volumeSlider.value = Math.round(sink.audio.volume * 100);
-            }
+        if (sink && sink.audio && sink.audio.volume !== undefined) {
+            root.currentVolume = Math.round(sink.audio.volume * 100);
         }
     }
 
@@ -370,7 +370,7 @@ PluginComponent {
             var pos = SettingsData.getPopupTriggerPosition(globalPos, screen, root.barThickness, pill.width, 8, 0, null);
             popout.setTriggerPosition(pos.x, pos.y, pos.width, root.section, screen, 0, root.barThickness, 8, null);
             popout.toggle();
-            root.updateVolumeSlider();
+            root.updateCurrentVolume();
         }
     }
 
@@ -420,7 +420,7 @@ PluginComponent {
                     minimum: 0
                     maximum: 100
                     step: 1
-                    value: 50
+                    value: root.currentVolume
                     onSliderValueChanged: function(newValue) {
                         AudioService.setVolume(newValue);
                     }
