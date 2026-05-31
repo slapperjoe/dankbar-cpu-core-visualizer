@@ -104,6 +104,7 @@ PluginComponent {
         function onSinkChanged() {
             root.lastSelectedSink = AudioService.sink;
             root.updateBarBadges();
+            root.updateVolumeSlider();
         }
     }
 
@@ -115,6 +116,15 @@ PluginComponent {
 
     Component.onDestruction: {
         refreshTimer.running = false;
+    }
+
+    function updateVolumeSlider() {
+        var sink = root.lastSelectedSink || AudioService.sink;
+        if (popout.volumeSlider) {
+            if (sink && sink.audio && sink.audio.volume !== undefined) {
+                popout.volumeSlider.value = Math.round(sink.audio.volume * 100);
+            }
+        }
     }
 
     function logToFile(message) {
@@ -360,6 +370,7 @@ PluginComponent {
             var pos = SettingsData.getPopupTriggerPosition(globalPos, screen, root.barThickness, pill.width, 8, 0, null);
             popout.setTriggerPosition(pos.x, pos.y, pos.width, root.section, screen, 0, root.barThickness, 8, null);
             popout.toggle();
+            root.updateVolumeSlider();
         }
     }
 
@@ -395,13 +406,34 @@ PluginComponent {
             detailsText: "Left-click widget to cycle | Click a sink to switch"
             showCloseButton: true
 
-            ListView {
-                id: sinkListView
+            Column {
                 width: parent.width
-                spacing: Theme.spacingS
-                height: Math.max(0, root.audioSinks.length * 48 + Math.max(0, root.audioSinks.length - 1) * Theme.spacingS)
-                model: root.audioSinks
-                clip: true
+                anchors.margins: 8
+                anchors.left: parent.left
+                anchors.right: parent.right
+                spacing: Theme.spacingM
+
+                // ── Volume Control ─────────────────────
+                DankSlider {
+                    id: volumeSlider
+                    width: parent.width
+                    minimum: 0
+                    maximum: 100
+                    step: 1
+                    value: 50
+                    onSliderValueChanged: function(newValue) {
+                        AudioService.setVolume(newValue);
+                    }
+                }
+
+                // ── Sink List ─────────────────────
+                ListView {
+                    id: sinkListView
+                    width: parent.width
+                    spacing: Theme.spacingS
+                    height: Math.max(0, root.audioSinks.length * 48 + Math.max(0, root.audioSinks.length - 1) * Theme.spacingS)
+                    model: root.audioSinks
+                    clip: true
 
                 delegate: Rectangle {
                     property var sink: modelData
@@ -491,8 +523,12 @@ PluginComponent {
                         }
                     }
                 }
-                }
+
+                // End of ListView
             }
+
+            // End of Column
+        }
     }
     popoutWidth: 380
     popoutHeight: 0
