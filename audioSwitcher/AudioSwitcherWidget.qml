@@ -533,3 +533,4 @@ PluginComponent {
     popoutWidth: 380
     popoutHeight: 0
 }
+}
