@@ -3,8 +3,6 @@ import qs.Common
 import qs.Modules.Plugins
 import qs.Services
 import qs.Widgets
-import Quickshell.Services.Pipewire
-
 PluginSettings {
     id: root
     pluginId: "audioSwitcher"
@@ -39,8 +37,6 @@ PluginSettings {
             }
         }
     }
-
-    property bool sinksLoaded: root.audioSinks.length > 0
 
     function sinkLabel(sink) {
         return AudioService.displayName(sink) || sink.description || sink.name;

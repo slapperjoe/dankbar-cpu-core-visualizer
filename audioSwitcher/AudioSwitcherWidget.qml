@@ -19,14 +19,6 @@ PluginComponent {
     // barThickness and widgetThickness are inherited from PluginComponent
     // (barThickness: 48, widgetThickness: 30)
 
-    property string currentDeviceName: {
-        var sink = root.lastSelectedSink || AudioService.sink;
-        if (sink) {
-            return AudioService.displayName(sink) || sink.description || "Audio output";
-        }
-        return "No audio output";
-    }
-
     property string currentDeviceIcon: {
         var sink = root.lastSelectedSink || AudioService.sink;
         if (!sink)
@@ -84,6 +76,7 @@ PluginComponent {
             }
             root.updateBarBadges();
         }
+    }
 
     Timer {
         id: refreshTimer
@@ -346,29 +339,6 @@ PluginComponent {
             popout.toggle();
             root.updateCurrentVolume();
         }
-    }
-
-    function toggleSinkEnabled(sink) {
-        // Toggle whether this sink is included in the auto-cycle pool
-        var enabled = root.enabledSinks;
-        var index = enabled.indexOf(sink.name);
-        if (index >= 0) {
-            // Don't disable the currently active sink
-            if (root.isSinkActive(sink)) {
-                return;
-            }
-            enabled.splice(index, 1);
-        } else {
-            enabled.push(sink.name);
-        }
-        // Persist to pluginData
-        var copy = enabled.slice();
-        pluginData["audioQuickSwitchEnabledSinks"] = copy;
-        root.enabledSinks = copy;
-        // Re-filter quickSwitchSinks
-        root.quickSwitchSinks = root.audioSinks.filter(function(s) {
-            return s.name && copy.includes(s.name);
-        });
     }
 
     popoutContent: Component {
