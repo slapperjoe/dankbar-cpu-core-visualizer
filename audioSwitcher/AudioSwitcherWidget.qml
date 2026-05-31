@@ -14,6 +14,7 @@ PluginComponent {
     property var lastSelectedSink: null
     property var quickSwitchSinks: []
     property var enabledSinks: []
+    property int _badgeRefresh: 0
 
     property string currentDeviceName: {
         var sink = root.lastSelectedSink || AudioService.sink;
@@ -62,14 +63,19 @@ PluginComponent {
                 if (AudioService.sink && root.audioSinks[i].name === AudioService.sink.name) {
                     root.activeSinkIndex = i;
                     root.logToFile("Active sink: " + i + " - " + AudioService.displayName(AudioService.sink));
+                    root.updateBarBadges();
                     return;
                 }
             }
+
+            // If no active sink found, still update badges
+            root.updateBarBadges();
         } else {
             root.audioSinks = [];
             root.quickSwitchSinks = [];
             root.enabledSinks = [];
             root.logToFile("AudioService not available");
+            root.updateBarBadges();
         }
         root.activeSinkIndex = 0;
     }
@@ -155,6 +161,29 @@ PluginComponent {
         return "speaker";
     }
 
+    // Returns 1-based index within quickSwitchSinks, or 0 if not in pool
+    function sinkCycleIndex(sink) {
+        if (!sink || !sink.name) return 0;
+        var pool = root.quickSwitchSinks;
+        for (var i = 0; i < pool.length; i++) {
+            if (pool[i].name === sink.name) {
+                return i + 1;
+            }
+        }
+        return 0;
+    }
+
+    // Update bar badge state (called on init and on sink change)
+    function updateBarBadge() {
+        var sink = root.lastSelectedSink || AudioService.sink;
+        return sink ? root.sinkCycleIndex(sink) : 0;
+    }
+
+    // Called after sinks are loaded to force-badge update on the bar pills
+    function updateBarBadges() {
+        root._badgeRefresh += 1;
+    }
+
     function sinkLabel(sink) {
         if (!sink) return "No audio output";
         return AudioService.displayName(sink) || sink.description || sink.name || "Audio output";
@@ -169,11 +198,47 @@ PluginComponent {
             color: pillMouse.containsMouse ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
             DankIcon {
-                anchors.centerIn: parent
+                id: barIcon
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 4
                 name: root.currentDeviceIcon
-                size: Math.min(root.barThickness - 6, Theme.iconSize + 2)
+                size: Math.min(root.barThickness - 12, Theme.iconSize + 2)
                 color: Theme.widgetTextColor
                 filled: true
+            }
+
+            // Numbered badge — positioned as sibling of the icon
+            Rectangle {
+                id: barBadge
+                objectName: "barBadge"
+                property int badgeIdx: root.updateBarBadge()
+                // Force re-evaluation when sinks are refreshed
+                property int _force: root._badgeRefresh
+                visible: badgeIdx > 0
+                anchors.bottom: barIcon.bottom
+                anchors.right: barIcon.right
+                anchors.bottomMargin: 0
+                anchors.rightMargin: 0
+                width: 16
+                height: width
+                radius: width / 2
+                color: Theme.primary
+                border.width: 1
+                border.color: Theme.surfaceContainerHigh
+
+                StyledText {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.horizontalCenterOffset: -1
+                    anchors.verticalCenterOffset: 1
+                    text: String(parent.badgeIdx)
+                    color: Theme.surfaceContainerHigh
+                    font.pixelSize: 10
+                    font.weight: Font.Bold
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
 
             MouseArea {
@@ -197,11 +262,44 @@ PluginComponent {
             color: pillMouse.containsMouse ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
             DankIcon {
-                anchors.centerIn: parent
+                id: vBarIcon
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
                 name: root.currentDeviceIcon
-                size: Math.min(parent.width - 6, Theme.iconSize + 2)
+                size: Math.min(parent.width - 12, Theme.iconSize + 2)
                 color: Theme.widgetTextColor
                 filled: true
+            }
+
+            Rectangle {
+                id: vBarBadge
+                objectName: "vBarBadge"
+                property int badgeIdx: root.updateBarBadge()
+                property int _force: root._badgeRefresh
+                visible: badgeIdx > 0
+                anchors.bottom: vBarIcon.bottom
+                anchors.right: vBarIcon.right
+                anchors.bottomMargin: 0
+                anchors.rightMargin: 0
+                width: 16
+                height: width
+                radius: width / 2
+                color: Theme.primary
+                border.width: 1
+                border.color: Theme.surfaceContainerHigh
+
+                StyledText {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.horizontalCenterOffset: -1
+                    anchors.verticalCenterOffset: 1
+                    text: String(parent.badgeIdx)
+                    color: Theme.surfaceContainerHigh
+                    font.pixelSize: 10
+                    font.weight: Font.Bold
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
 
             MouseArea {
@@ -311,46 +409,108 @@ PluginComponent {
                             anchors.margins: Theme.spacingM
                             spacing: Theme.spacingM
 
-                            CheckBox {
-                                id: checkBox
-                                checked: root.enabledSinks.includes(parent.sink.name)
-                                enabled: !root.isSinkActive(parent.sink)
-                                onClicked: {
-                                    checkBox.checked = !checkBox.checked;
-                                    root.toggleSinkEnabled(parent.sink);
+                            // Custom checkbox (CheckBox type not available)
+                            Rectangle {
+                                id: checkboxBox
+                                width: Theme.iconSize
+                                height: width
+                                radius: 3
+                                border.width: 1
+                                border.color: root.isSinkActive(parent.sink) ? Theme.primary : Theme.outline
+                                color: root.enabledSinks.includes(parent.sink.name) ? Theme.primary : "transparent"
+
+                                MouseArea {
+                                    id: checkboxClick
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    enabled: !root.isSinkActive(parent.sink)
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.toggleSinkEnabled(parent.sink);
+                                    }
+                                }
+
+                                // Checkmark icon when enabled
+                                DankIcon {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    name: "check"
+                                    size: Theme.iconSize - 4
+                                    color: "white"
+                                    filled: true
+                                    visible: root.enabledSinks.includes(parent.sink.name)
                                 }
                             }
 
-                            MouseArea {
-                                anchors.left: parent.left
+                            Row {
+                                id: sinkInfo
+                                anchors.left: checkboxBox.right
                                 anchors.right: parent.right
-                                anchors.leftMargin: checkBox.width + Theme.spacingM
+                                anchors.leftMargin: Theme.spacingM
+                                anchors.rightMargin: Theme.spacingXS
                                 anchors.top: parent.top
                                 anchors.bottom: parent.bottom
-                                anchors.topMargin: Theme.spacingXS
-                                anchors.bottomMargin: Theme.spacingXS
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.selectAudioOutput(parent.sink);
-                                    popout.closePopout();
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Theme.spacingM
+
+                                DankIcon {
+                                    id: sinkIconItem
+                                    width: Theme.iconSize
+                                    height: width
+                                    name: root.sinkIconName(parent.sink)
+                                    color: root.isSinkActive(parent.sink) ? Theme.primary : Theme.surfaceText
+                                    filled: true
                                 }
 
-                                Row {
-                                    anchors.fill: parent
-                                    spacing: Theme.spacingM
+                                // Cycle position badge
+                                Rectangle {
+                                    id: sinkBadgeItem
+                                    property int cycleIdx: root.sinkCycleIndex(parent.sink)
+                                    property int _force: root._badgeRefresh
+                                    visible: cycleIdx > 0
+                                    anchors.left: sinkIconItem.right
+                                    anchors.bottom: sinkIconItem.bottom
+                                    anchors.leftMargin: -8
+                                    anchors.bottomMargin: -2
+                                    width: 16
+                                    height: width
+                                    radius: width / 2
+                                    color: Theme.primary
+                                    border.width: 1
+                                    border.color: root.isSinkActive(parent.sink) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
-                                    DankIcon {
+                                    StyledText {
+                                        anchors.horizontalCenter: parent.horizontalCenter
                                         anchors.verticalCenter: parent.verticalCenter
-                                        name: root.sinkIconName(parent.sink)
-                                        size: Theme.iconSize
-                                        color: root.isSinkActive(parent.sink) ? Theme.primary : Theme.surfaceText
-                                        filled: true
+                                        anchors.horizontalCenterOffset: -1
+                                        anchors.verticalCenterOffset: 1
+                                        text: String(parent.cycleIdx)
+                                        color: Theme.surfaceContainerHigh
+                                        font.pixelSize: 10
+                                        font.weight: Font.Bold
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.selectAudioOutput(parent.sink);
+                                        popout.closePopout();
                                     }
 
                                     StyledText {
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
-                                        width: parent.width - Theme.iconSize - Theme.spacingM
+                                        anchors.leftMargin: Theme.iconSize + Theme.spacingM
+                                        anchors.rightMargin: 0
                                         text: root.sinkLabel(parent.sink)
                                         color: Theme.surfaceText
                                         font.pixelSize: Theme.fontSizeMedium
