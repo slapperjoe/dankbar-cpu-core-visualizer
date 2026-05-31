@@ -142,35 +142,35 @@ PluginComponent {
 
     Component.onCompleted: {
         root.isDesktopWidget = (root.barConfig === undefined || root.barConfig === null);
+        root._applyPluginData();
+        DgopService.addRef(["cpu", "memory", "disk", "processes", "network", "gpu"]);
+        DgopService.updateAllStats();
+        root.syncAnimatedDiskUsage(true);
+        root._badgeRefresh += 1;
+    }
+
+    Component.onDestruction: {
+        DgopService.removeRef(["cpu", "memory", "disk", "processes", "network", "gpu"]);
+    }
+
+    // Re-apply settings when pluginData changes (e.g., user changes settings)
+    onPluginDataChanged: root._applyPluginData()
+
+    function _applyPluginData() {
         root.colorMode = pluginData["colorMode"] || "vivid";
-        root.barWidth = Number(pluginData["barWidth"]) || 24;
-        root.barGap = Number(pluginData["barGap"]) || 4;
-        root.smoothingPercent = Number(pluginData["smoothingPercent"]) || 15;
-        root.probeInterval = Number(pluginData["probeInterval"]) || 3000;
-        root.probeIntervalMs = Math.max(500, Math.min(30000, root.probeInterval));
-        root.smoothingPercent = Math.max(1, Math.min(99, root.smoothingPercent));
-        root.barWidth = Math.max(8, Math.min(80, root.barWidth));
-        root.barGap = Math.max(1, Math.min(20, root.barGap));
-        root.cornerRadius = Math.max(2, Math.min(20, Number(pluginData["cornerRadius"]) || 6));
+        root.barWidth = Math.max(8, Math.min(80, Number(pluginData["barWidth"]) || 24);
+        root.barGap = Math.max(1, Math.min(20, Number(pluginData["barGap"]) || 4);
+        root.smoothingPercent = Math.max(1, Math.min(99, Number(pluginData["smoothingPercent"]) || 15);
+        root.cornerRadius = Math.max(2, Math.min(20, Number(pluginData["cornerRadius"]) || 6);
+        root.probeInterval = Math.max(500, Math.min(30000, Number(pluginData["probeInterval"]) || 3000);
+        root.probeIntervalMs = root.probeInterval;
+        root.popoutTriggerMode = pluginData["popoutTriggerMode"] || "click";
         var storedPaths = pluginData["selectedDiskMountPaths"];
         if (Array.isArray(storedPaths) && storedPaths.length > 0) {
             root.selectedDiskMountPaths = storedPaths;
         } else {
             root.selectedDiskMountPaths = ["/"];
         }
-
-        DgopService.addRef(["cpu", "memory", "disk", "processes", "network", "gpu"]);
-        DgopService.updateAllStats();
-        root.syncAnimatedDiskUsage(true);
-        root.popoutTriggerMode = pluginData["popoutTriggerMode"] || "click";
-        root._badgeRefresh += 1;
-        console.error("[diskMonitor] diskMounts:", JSON.stringify(DgopService.diskMounts));
-        console.error("[diskMonitor] diskMountList:", JSON.stringify(root.diskMountList));
-        console.error("[diskMonitor] selectedDiskMountPaths:", JSON.stringify(root.selectedDiskMountPaths));
-    }
-
-    Component.onDestruction: {
-        DgopService.removeRef(["cpu", "memory", "disk", "processes", "network", "gpu"]);
     }
 
     // ── Functions ──────────────────────────────────────────────
@@ -291,161 +291,221 @@ PluginComponent {
     property real barThickness: 40
 
     horizontalBarPill: Component {
-        Row {
-            id: hContentRow
-            spacing: -6
+        MouseArea {
+            id: hMouseArea
+            implicitWidth: hContentRow.implicitWidth
+            implicitHeight: hContentRow.implicitHeight
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
 
-            DankIcon {
-                name: "storage"
-                size: Theme.iconSize - 6
-                color: "#FFFFFF"
-                filled: true
-                anchors.verticalCenter: parent.verticalCenter
+            onEntered: {
+                if (root.popoutTriggerMode === "hover")
+                    root.openPopout();
             }
 
-            Rectangle {
-                property int _force: root._badgeRefresh
-                visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
-                width: 14
-                height: width
-                radius: width / 2
-                color: Theme.primary
-                border.width: 1
-                border.color: Theme.surfaceContainerHigh
-
-                StyledText {
-                    property int _force: parent._force
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenterOffset: -1
-                    anchors.verticalCenterOffset: 1
-                    text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
-                    color: Theme.surfaceContainerHigh
-                    font.pixelSize: 10
-                    font.weight: Font.Bold
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+            onClicked: function(mouse) {
+                if (mouse.button === Qt.RightButton) {
+                    root.pillRightClickAction();
+                } else if (root.popoutTriggerMode === "click") {
+                    root.openPopout();
                 }
             }
-        }
-    }
 
-    verticalBarPill: Component {
-        Row {
-            id: vContentRow
-            spacing: -6
+            Row {
+                id: hContentRow
+                spacing: -6
 
-            DankIcon {
-                name: "storage"
-                size: Theme.iconSize - 6
-                color: "#FFFFFF"
-                filled: true
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Rectangle {
-                property int _force: root._badgeRefresh
-                visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
-                width: 14
-                height: width
-                radius: width / 2
-                color: Theme.primary
-                border.width: 1
-                border.color: Theme.surfaceContainerHigh
-
-                StyledText {
-                    property int _force: parent._force
-                    anchors.horizontalCenter: parent.horizontalCenter
+                DankIcon {
+                    name: "storage"
+                    size: Theme.iconSize - 6
+                    color: "#FFFFFF"
+                    filled: true
                     anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenterOffset: -1
-                    anchors.verticalCenterOffset: 1
-                    text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
-                    color: Theme.surfaceContainerHigh
-                    font.pixelSize: 10
-                    font.weight: Font.Bold
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
                 }
-            }
-        }
-    }
 
-    // ── Popout triggers ────────────────────────────────
-    // Left-click always opens the popout (BasePill routes left-click here)
-    pillClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
-        var popout = null;
-        for (var i = 0; i < root.children.length; i++) {
-            var child = root.children[i];
-            if (typeof child.setTriggerPosition === "function") {
-                popout = child;
-                break;
-            }
-        }
-        if (popout) {
-            popout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen);
-            popout.toggle();
-        }
-    }
+                Rectangle {
+                    property int _force: root._badgeRefresh
+                    visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
+                    width: 14
+                    height: width
+                    radius: width / 2
+                    color: Theme.primary
+                    border.width: 1
+                    border.color: Theme.surfaceContainerHigh
 
-    pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
-        var popout = null;
-        for (var i = 0; i < root.children.length; i++) {
-            var child = root.children[i];
-            if (typeof child.setTriggerPosition === "function") {
-                popout = child;
-                break;
-            }
-        }
-        if (popout) {
-            popout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen);
-            popout.toggle();
-        }
-    }
-
-    popoutContent: Component {
-        PopoutComponent {
-            headerText: "Disk Monitor"
-            detailsText: root.diskUsageTooltipText
-
-            Column {
-                width: parent.width
-                height: Math.max(48, 24 * root.selectedDiskMounts.length)
-                anchors.margins: 8
-                spacing: 8
-
-                Repeater {
-                    height: 16 * root.selectedDiskMounts.length
-                    model: root.selectedDiskMounts
-
-                    delegate: Row {
-                        spacing: 8
-
-                        Rectangle {
-                            width: root.barWidth
-                            height: 8
-                            radius: 4
-                            color: "#333333"
-
-                            Rectangle {
-                                width: (root.animatedDiskUsages[index] || 0) / 100 * parent.width
-                                height: parent.height
-                                radius: 4
-                                color: root.colorFor(index)
-                                opacity: 0.96
-                            }
-                        }
-
-                        StyledText {
-                            text: root.diskMountPath(modelData) + ": " + (root.animatedDiskUsages[index] || 0).toFixed(0) + "%"
-                            color: Theme.surfaceText
-                            font.pixelSize: Theme.fontSizeSmall
-                        }
+                    StyledText {
+                        property int _force: parent._force
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.horizontalCenterOffset: -1
+                        anchors.verticalCenterOffset: 1
+                        text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
+                        color: Theme.surfaceContainerHigh
+                        font.pixelSize: 10
+                        font.weight: Font.Bold
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
                 }
             }
         }
     }
 
+    verticalBarPill: Component {
+        MouseArea {
+            id: vMouseArea
+            implicitWidth: vContentRow.implicitWidth
+            implicitHeight: vContentRow.implicitHeight
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+
+            onEntered: {
+                if (root.popoutTriggerMode === "hover")
+                    root.openPopout();
+            }
+
+            onClicked: function(mouse) {
+                if (mouse.button === Qt.RightButton) {
+                    root.pillRightClickAction();
+                } else if (root.popoutTriggerMode === "click") {
+                    root.openPopout();
+                }
+            }
+
+            Row {
+                id: vContentRow
+                spacing: -6
+
+                DankIcon {
+                    name: "storage"
+                    size: Theme.iconSize - 6
+                    color: "#FFFFFF"
+                    filled: true
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Rectangle {
+                    property int _force: root._badgeRefresh
+                    visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
+                    width: 14
+                    height: width
+                    radius: width / 2
+                    color: Theme.primary
+                    border.width: 1
+                    border.color: Theme.surfaceContainerHigh
+
+                    StyledText {
+                        property int _force: parent._force
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.horizontalCenterOffset: -1
+                        anchors.verticalCenterOffset: 1
+                        text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
+                        color: Theme.surfaceContainerHigh
+                        font.pixelSize: 10
+                        font.weight: Font.Bold
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Popout triggers ────────────────────────────────
+    pillClickAction: function() {
+        if (root.popoutTriggerMode === "click") {
+            root.openPopout();
+        }
+    }
+
+    pillRightClickAction: function() {
+        root.openPopout();
+    }
+
+    function openPopout() {
+        var popout = null;
+        for (var i = 0; i < root.children.length; i++) {
+            var child = root.children[i];
+            if (typeof child.setTriggerPosition === "function") {
+                popout = child;
+                break;
+            }
+        }
+        if (popout) {
+            popout.toggle();
+        }
+    }
+
+    popoutContent: Component {
+        PopoutComponent {
+            id: popout
+            headerText: "Disk Monitor"
+            detailsText: root.diskUsageTooltipText
+            showCloseButton: false
+
+            Column {
+                width: parent.width
+                anchors.margins: 8
+                spacing: Theme.spacingM
+
+                Repeater {
+                    model: root.selectedDiskMounts
+
+                    delegate: Rectangle {
+                        width: parent.width
+                        height: 44
+                        radius: Theme.cornerRadius
+                        color: Theme.withAlpha(Theme.surfaceContainerHigh, Theme.popupTransparency)
+
+                        Row {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 8
+
+                            // Bar background
+                            Rectangle {
+                                width: parent.width - 120
+                                height: 10
+                                radius: 5
+                                color: Theme.withAlpha(Theme.surfaceVariant, Theme.popupTransparency)
+
+                                // Bar fill
+                                Rectangle {
+                                    width: (root.animatedDiskUsages[index] || 0) / 100 * parent.width
+                                    height: parent.height
+                                    radius: 5
+                                    color: root.colorFor(index)
+                                    opacity: 0.96
+                                }
+                            }
+
+                            StyledText {
+                                width: 100
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.diskMountPath(modelData) + "  " + (root.animatedDiskUsages[index] || 0).toFixed(0) + "%"
+                                color: Theme.surfaceText
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.weight: Font.Medium
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignRight
+                            }
+                        }
+                    }
+                }
+
+                StyledText {
+                    width: parent.width
+                    text: "Waiting for disk stats"
+                    color: Theme.surfaceVariantText
+                    font.pixelSize: Theme.fontSizeSmall
+                    horizontalAlignment: Text.AlignCenter
+                    visible: root.selectedDiskMounts.length === 0
+                }
+            }
+        }
+    }
+
     popoutWidth: 360
-    popoutHeight: 220
+    popoutHeight: 0
 }
