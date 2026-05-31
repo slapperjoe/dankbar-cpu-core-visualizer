@@ -11,7 +11,6 @@ PluginComponent {
     id: root
 
     // ── Properties ─────────────────────────────────────────────
-    property var pluginData: Plugins.PluginStorage
     property bool isDesktopWidget: false
 
     // Disk settings
@@ -142,17 +141,22 @@ PluginComponent {
 
     Component.onCompleted: {
         root.isDesktopWidget = (root.barConfig === undefined || root.barConfig === null);
-        root.colorMode = root.pluginData.stringSetting("colorMode", "vivid");
-        root.barWidth = root.pluginData.numberSetting("barWidth", 24);
-        root.barGap = root.pluginData.numberSetting("barGap", 4);
-        root.smoothingPercent = root.pluginData.numberSetting("smoothingPercent", 15);
-        root.probeInterval = root.pluginData.numberSetting("probeInterval", 3000);
+        root.colorMode = pluginData["colorMode"] || "vivid";
+        root.barWidth = Number(pluginData["barWidth"]) || 24;
+        root.barGap = Number(pluginData["barGap"]) || 4;
+        root.smoothingPercent = Number(pluginData["smoothingPercent"]) || 15;
+        root.probeInterval = Number(pluginData["probeInterval"]) || 3000;
         root.probeIntervalMs = Math.max(500, Math.min(30000, root.probeInterval));
         root.smoothingPercent = Math.max(1, Math.min(99, root.smoothingPercent));
         root.barWidth = Math.max(8, Math.min(80, root.barWidth));
         root.barGap = Math.max(1, Math.min(20, root.barGap));
-        root.cornerRadius = Math.max(2, Math.min(20, root.pluginData.numberSetting("cornerRadius", 6)));
-        root.selectedDiskMountPaths = root.pluginData.arraySetting("selectedDiskMountPaths", ["/"]);
+        root.cornerRadius = Math.max(2, Math.min(20, Number(pluginData["cornerRadius"]) || 6));
+        var storedPaths = pluginData["selectedDiskMountPaths"];
+        if (Array.isArray(storedPaths) && storedPaths.length > 0) {
+            root.selectedDiskMountPaths = storedPaths;
+        } else {
+            root.selectedDiskMountPaths = ["/"];
+        }
 
         DgopService.addRef(["diskmounts"]);
         root.syncAnimatedDiskUsage(true);
@@ -422,15 +426,9 @@ PluginComponent {
                 }
             }
 
-            HoverHandler {
-                onHoveredChanged: {
-                    root.barHovered = hovered;
-                }
             }
         }
-    }
-
-    function verticalHeightFor(index, totalHeight) {
+        function verticalHeightFor(index, totalHeight) {
         const usage = root.animatedDiskUsages[index] || 0;
         return Math.max(2, root.clampUsage(usage) / 100 * totalHeight);
     }
