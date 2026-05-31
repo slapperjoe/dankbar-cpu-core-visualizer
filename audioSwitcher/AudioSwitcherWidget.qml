@@ -15,6 +15,8 @@ PluginComponent {
     property var quickSwitchSinks: []
     property var enabledSinks: []
     property int _badgeRefresh: 0
+    property int barThickness: 32
+    property int widgetThickness: 32
 
     property string currentDeviceName: {
         var sink = root.lastSelectedSink || AudioService.sink;
@@ -142,8 +144,12 @@ PluginComponent {
 
     function selectAudioOutput(sink) {
         if (!sink) return false;
-        Pipewire.preferredDefaultAudioSink = sink;
-        root.lastSelectedSink = sink;
+        if (AudioService.setDefaultAudioSink) {
+            AudioService.setDefaultAudioSink(sink);
+        } else {
+            Pipewire.preferredDefaultAudioSink = sink;
+        }
+        // Don't set lastSelectedSink here — let onSinkChanged update it reactively
         root.logToFile("Selected: " + sink.name);
         return true;
     }
@@ -166,8 +172,12 @@ PluginComponent {
 
         var nextIndex = (currentIndex + 1) % sinks.length;
         var nextSink = sinks[nextIndex];
-        Pipewire.preferredDefaultAudioSink = nextSink;
-        root.lastSelectedSink = nextSink;
+        if (AudioService.setDefaultAudioSink) {
+            AudioService.setDefaultAudioSink(nextSink);
+        } else {
+            Pipewire.preferredDefaultAudioSink = nextSink;
+        }
+        // Don't set lastSelectedSink — let onSinkChanged update it reactively
         root.logToFile("Cycled to: " + (nextSink.name || "unknown"));
         return true;
     }
@@ -211,34 +221,29 @@ PluginComponent {
     // ── Bar Widget (icon-only, no text) ─────────────────────
     horizontalBarPill: Component {
         Rectangle {
-            width: root.barThickness
-            height: root.barThickness
+            implicitWidth: root.barThickness
+            implicitHeight: root.widgetThickness
             radius: Theme.cornerRadius
-            color: pillMouse.containsMouse ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+            color: Theme.surfaceContainerHigh
 
             DankIcon {
                 id: barIcon
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 7
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: barBadge.left
+                anchors.rightMargin: 4
                 name: root.currentDeviceIcon
-                size: Math.min(root.barThickness - 12, Theme.iconSize + 2)
+                size: Math.min(parent.height - 12, Theme.iconSize + 2)
                 color: Theme.widgetTextColor
                 filled: true
             }
 
-            // Numbered badge — positioned as sibling of the icon
             Rectangle {
                 id: barBadge
-                objectName: "barBadge"
-                property int badgeIdx: root.updateBarBadge()
-                // Force re-evaluation when sinks are refreshed
                 property int _force: root._badgeRefresh
-                visible: badgeIdx > 0
-                anchors.bottom: barIcon.bottom
-                anchors.right: barIcon.right
-                anchors.bottomMargin: 0
-                anchors.rightMargin: 0
+                visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.rightMargin: 4
                 width: 16
                 height: width
                 radius: width / 2
@@ -247,11 +252,12 @@ PluginComponent {
                 border.color: Theme.surfaceContainerHigh
 
                 StyledText {
+                    property int _force: parent._force
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.horizontalCenterOffset: -1
                     anchors.verticalCenterOffset: 1
-                    text: String(parent.badgeIdx)
+                    text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
                     color: Theme.surfaceContainerHigh
                     font.pixelSize: 10
                     font.weight: Font.Bold
@@ -263,7 +269,6 @@ PluginComponent {
             MouseArea {
                 id: pillMouse
                 anchors.fill: parent
-                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     root.logToFile("[AudioSwitcher] Left-click: cycling to next sink");
@@ -275,32 +280,29 @@ PluginComponent {
 
     verticalBarPill: Component {
         Rectangle {
-            width: root.barThickness
-            height: width
+            implicitWidth: root.barThickness
+            implicitHeight: root.widgetThickness
             radius: Theme.cornerRadius
-            color: pillMouse.containsMouse ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+            color: Theme.surfaceContainerHigh
 
             DankIcon {
                 id: vBarIcon
-                anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -3
+                anchors.right: vBarBadge.left
+                anchors.rightMargin: 4
                 name: root.currentDeviceIcon
-                size: Math.min(parent.width - 12, Theme.iconSize + 2)
+                size: Math.min(parent.height - 12, Theme.iconSize + 2)
                 color: Theme.widgetTextColor
                 filled: true
             }
 
             Rectangle {
                 id: vBarBadge
-                objectName: "vBarBadge"
-                property int badgeIdx: root.updateBarBadge()
                 property int _force: root._badgeRefresh
-                visible: badgeIdx > 0
-                anchors.bottom: vBarIcon.bottom
-                anchors.right: vBarIcon.right
-                anchors.bottomMargin: 0
-                anchors.rightMargin: 0
+                visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.rightMargin: 4
                 width: 16
                 height: width
                 radius: width / 2
@@ -309,11 +311,12 @@ PluginComponent {
                 border.color: Theme.surfaceContainerHigh
 
                 StyledText {
+                    property int _force: parent._force
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.horizontalCenterOffset: -1
                     anchors.verticalCenterOffset: 1
-                    text: String(parent.badgeIdx)
+                    text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
                     color: Theme.surfaceContainerHigh
                     font.pixelSize: 10
                     font.weight: Font.Bold
@@ -325,7 +328,6 @@ PluginComponent {
             MouseArea {
                 id: pillMouse
                 anchors.fill: parent
-                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     root.logToFile("[AudioSwitcher] Left-click: cycling to next sink");
@@ -359,9 +361,8 @@ PluginComponent {
         if (popout && pill) {
             var globalPos = pill.mapToItem(null, 0, 0);
             var screen = root.parentScreen || Screen;
-            var barPosition = axis?.edge === "left" ? 2 : (axis?.edge === "right" ? 3 : (axis?.edge === "top" ? 0 : 1));
-            var pos = SettingsData.getPopupTriggerPosition(globalPos, screen, barThickness, pill.width, barSpacing, barPosition, barConfig);
-            popout.setTriggerPosition(pos.x, pos.y, pos.width, root.section, screen, barPosition, barThickness, barSpacing, barConfig);
+            var pos = SettingsData.getPopupTriggerPosition(globalPos, screen, root.barThickness, pill.width, 8, 0, null);
+            popout.setTriggerPosition(pos.x, pos.y, pos.width, root.section, screen, 0, root.barThickness, 8, null);
             popout.toggle();
         }
     }
@@ -401,7 +402,7 @@ PluginComponent {
             ListView {
                 id: sinkListView
                 width: parent.width
-                height: Math.max(0, root.audioSinks.length * 56)
+                height: Math.max(0, root.audioSinks.length * (48 + 4))
                 model: root.audioSinks
                 clip: true
 
@@ -416,7 +417,7 @@ PluginComponent {
                     Rectangle {
                         anchors.left: parent.left
                         anchors.bottom: parent.bottom
-                        width: parent.width
+                        anchors.right: parent.right
                         height: 2
                         radius: 1
                         color: root.isSinkActive(sink) ? Theme.primary : "transparent"
@@ -441,9 +442,8 @@ PluginComponent {
                         // Cycle position badge
                         Rectangle {
                             id: sinkBadgeItem
-                            property int cycleIdx: root.sinkCycleIndex(sink)
                             property int _force: root._badgeRefresh
-                            visible: cycleIdx > 0
+                            visible: _force ? (root.sinkCycleIndex(sink) > 0) : (root.sinkCycleIndex(sink) > 0)
                             anchors.left: sinkIconItem.right
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.leftMargin: -8
@@ -456,11 +456,12 @@ PluginComponent {
                             border.color: root.isSinkActive(sink) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
                             StyledText {
+                                property int _force: parent._force
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.horizontalCenterOffset: -1
                                 anchors.verticalCenterOffset: 1
-                                text: String(parent.cycleIdx)
+                                text: String(_force ? root.sinkCycleIndex(sink) : root.sinkCycleIndex(sink))
                                 color: Theme.surfaceContainerHigh
                                 font.pixelSize: 10
                                 font.weight: Font.Bold

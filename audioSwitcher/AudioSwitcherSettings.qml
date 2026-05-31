@@ -22,7 +22,6 @@ PluginSettings {
                 var sinks = AudioService.getAvailableSinks();
                 if (sinks && Array.isArray(sinks)) {
                     root.audioSinks = sinks;
-                    // Load persisted enabled sinks
                     var stored = pluginData["audioQuickSwitchEnabledSinks"];
                     var enabledNames = [];
                     if (stored && Array.isArray(stored)) {
@@ -33,7 +32,6 @@ PluginSettings {
                         enabledNames = root.audioSinks.map(function(s) { return s.name; });
                     }
                     root.enabledSinks = enabledNames;
-                    // Stop retrying once we have data
                     sinksTimer.stop();
                 }
             } catch (e) {
@@ -42,76 +40,102 @@ PluginSettings {
         }
     }
 
-    // Custom function to toggle a sink's enabled state
-    function toggleSink(name) {
-        var index = root.enabledSinks.indexOf(name);
-        if (index >= 0) {
-            root.enabledSinks.splice(index, 1);
-        } else {
-            root.enabledSinks.push(name);
-        }
-        pluginData["audioQuickSwitchEnabledSinks"] = root.enabledSinks.slice();
+    property bool sinksLoaded: root.audioSinks.length > 0
+
+    function isSinkActive(sink) {
+        if (!sink) return false;
+        var current = AudioService.sink;
+        if (!current) return false;
+        // AudioService.sink can be a sink object or a string name
+        var currentName = typeof current === "string" ? current : (current.name || null);
+        return sink.name === currentName;
     }
 
-    // Settings content: list of all sinks with checkboxes
-    content: ScrollView {
+    function toggleSink(name) {
+        var index = root.enabledSinks.indexOf(name);
+        var copy = root.enabledSinks.slice();
+        if (index >= 0) {
+            copy.splice(index, 1);
+        } else {
+            copy.push(name);
+        }
+        root.enabledSinks = copy;
+        pluginData["audioQuickSwitchEnabledSinks"] = copy.slice();
+    }
+
+    StyledText {
         width: parent.width
-        height: parent.height
+        text: "Audio Switcher Settings"
+        font.pixelSize: Theme.fontSizeLarge
+        font.weight: Font.Bold
+        color: Theme.surfaceText
+    }
 
-        Column {
-            id: sinkList
-            width: parent.width
-            spacing: Theme.spacingS
+    StyledText {
+        width: parent.width
+        text: "Sinks detected: " + root.audioSinks.length
+        font.pixelSize: Theme.fontSizeSmall
+        color: Theme.surfaceVariantText
+    }
 
-            Repeater {
-                model: root.audioSinks
+    Column {
+        width: parent.width
+        spacing: Theme.spacingS
 
-                delegate: Rectangle {
-                    required property var sink
-                    width: parent.width
-                    height: 48
-                    radius: Theme.cornerRadius
-                    color: Theme.surfaceContainerHigh
+        Repeater {
+            model: root.audioSinks
 
-                    Row {
-                        id: row
-                        anchors.fill: parent
-                        anchors.margins: Theme.spacingM
-                        spacing: Theme.spacingM
+            delegate: Rectangle {
+                property var sink: modelData
+                property bool isActive: root.isSinkActive(sink)
+                property bool isEnabled: root.enabledSinks.includes(sink.name)
+                width: parent.width
+                height: 48
+                radius: Theme.cornerRadius
+                opacity: isActive ? 0.5 : 1.0
+                color: isEnabled ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
-                        // Checkbox
-                        Rectangle {
-                            id: box
-                            width: Theme.iconSize
-                            height: width
-                            radius: 3
-                            border.width: 1
-                            border.color: Theme.outline
-                            color: root.enabledSinks.includes(parent.sink.name) ? Theme.primary : "transparent"
+                Row {
+                    anchors.fill: parent
+                    anchors.margins: Theme.spacingM
+                    spacing: Theme.spacingM
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.toggleSink(parent.sink.name);
-                                }
-                            }
+                    Rectangle {
+                        width: Theme.iconSize
+                        height: width
+                        radius: 3
+                        border.width: 1
+                        border.color: Theme.outline
+                        color: parent.isEnabled ? Theme.primary : "transparent"
 
-                            DankIcon {
-                                anchors.centerIn: parent
-                                name: "check"
-                                size: Theme.iconSize - 4
-                                color: "white"
-                                filled: true
-                                visible: root.enabledSinks.includes(parent.sink.name)
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (parent.isActive) return;
+                                root.toggleSink(parent.sink.name);
                             }
                         }
 
-                        StyledText {
-                            text: AudioService.displayName(parent.sink) || parent.sink.description || parent.sink.name
-                            color: Theme.surfaceText
-                            elide: Text.ElideRight
+                        DankIcon {
+                            anchors.centerIn: parent
+                            name: "check"
+                            size: Theme.iconSize - 4
+                            color: "white"
+                            filled: true
+                            visible: parent.isEnabled
                         }
+                    }
+
+                    StyledText {
+                        width: parent.width - (Theme.iconSize + Theme.spacingM)
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: Theme.iconSize + Theme.spacingM
+                        text: AudioService.displayName(parent.sink) || parent.sink.description || parent.sink.name
+                        color: parent.isEnabled ? Theme.primary : Theme.surfaceText
+                        font.weight: parent.isEnabled ? Font.Medium : Font.Normal
+                        elide: Text.ElideRight
                     }
                 }
             }
