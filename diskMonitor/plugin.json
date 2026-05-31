@@ -2,7 +2,7 @@
     "id": "diskMonitor",
     "name": "Disk Monitor",
     "description": "Disk mount usage monitoring for DankBar",
-    "version": "0.1.0",
+    "version": "0.5.0",
     "author": "Mark + Copilot",
     "type": "widget",
     "capabilities": ["dankbar-widget", "monitoring", "disk-visualizer"],

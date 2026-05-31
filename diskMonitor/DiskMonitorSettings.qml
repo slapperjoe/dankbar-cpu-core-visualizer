@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import qs.Common
 import qs.Modules.Plugins
 import qs.Services
@@ -8,151 +9,114 @@ PluginSettings {
     id: root
 
     pluginId: "diskMonitor"
-    title: "Disk Monitor"
 
-    ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 8
-        spacing: 8
+    StyledText {
+        width: parent.width
+        text: "Disk Monitor"
+        font.pixelSize: Theme.fontSizeLarge
+        font.weight: Font.Bold
+        color: Theme.surfaceText
+    }
 
-        // ── Disk Mounts ────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Disk Mounts"
+    StyledText {
+        width: parent.width
+        text: "Disk mount usage monitoring."
+        font.pixelSize: Theme.fontSizeSmall
+        color: Theme.surfaceVariantText
+        wrapMode: Text.WordWrap
+    }
 
-            readonly property var diskMountList: Array.isArray(DgopService.diskMounts) ? DgopService.diskMounts : []
+    // ── Disk Mounts ────────────────────────────────────
+    SelectionSetting {
+        settingKey: "selectedDiskMountPath"
+        label: "Disk Mount"
+        description: "Choose which disk mount to monitor"
+        options: root.diskMountOptions
+        defaultValue: "/"
+    }
 
-            readonly property var mountOptions: {
-                let options = [];
-                if (!Array.isArray(root.diskMountList) || root.diskMountList.length <= 0)
-                    return [{ label: "No disk stats available", value: "/" }];
-                for (let i = 0; i < root.diskMountList.length; i++) {
-                    const mount = root.diskMountList[i];
-                    const path = mount.path || mount.device || "/";
-                    options.push({ label: path, value: path });
-                }
-                return options;
-            }
+    // ── Polling ───────────────────────────────────────
+    SliderSetting {
+        settingKey: "probeInterval"
+        label: "Probe Interval"
+        description: "How often to request fresh disk stats (ms)"
+        defaultValue: 3000
+        minimum: 500
+        maximum: 30000
+        unit: "ms"
+    }
 
-            PluginSettingsRow {
-                title: "Monitored Mounts"
-                subtitle: "Pick which disk mounts to track"
-                control: PluginSettingsSelector {
-                    property var _mountOptions: root.mountOptions
-                    options: _mountOptions
-                    selected: root.pluginData.stringSetting("selectedDiskMountPath", "/")
-                    onSelected: root.pluginData.setString("selectedDiskMountPath", selected)
-                }
-            }
+    // ── Appearance ────────────────────────────────────
+    SelectionSetting {
+        settingKey: "colorMode"
+        label: "Color Mode"
+        description: "Vivid or soft palette for disk bars"
+        options: ["vivid", "soft"]
+        defaultValue: "vivid"
+    }
+
+    SliderSetting {
+        settingKey: "barWidth"
+        label: "Bar Width"
+        description: "Width of each disk bar in pixels"
+        defaultValue: 24
+        minimum: 8
+        maximum: 80
+        unit: "px"
+    }
+
+    SliderSetting {
+        settingKey: "barGap"
+        label: "Bar Gap"
+        description: "Spacing between disk bars"
+        defaultValue: 4
+        minimum: 1
+        maximum: 20
+        unit: "px"
+    }
+
+    SliderSetting {
+        settingKey: "cornerRadius"
+        label: "Corner Radius"
+        description: "Rounding of the disk bar corners"
+        defaultValue: 6
+        minimum: 2
+        maximum: 20
+        unit: "px"
+    }
+
+    // ── Interaction ────────────────────────────────────
+    SelectionSetting {
+        settingKey: "popoutTriggerMode"
+        label: "Popout Trigger"
+        description: "How to open the detail popout"
+        options: ["hover", "click"]
+        defaultValue: "click"
+    }
+
+    // ── Animation ─────────────────────────────────────
+    SliderSetting {
+        settingKey: "smoothingPercent"
+        label: "Animation Smoothing"
+        description: "Lower values glide more; higher values snap faster"
+        defaultValue: 15
+        minimum: 1
+        maximum: 99
+        unit: "%"
+    }
+
+    // Dynamically build disk mount options from DgopService
+    readonly property var diskMountList: Array.isArray(DgopService.diskMounts) ? DgopService.diskMounts : []
+
+    readonly property var diskMountOptions: {
+        let options = [];
+        if (!Array.isArray(root.diskMountList) || root.diskMountList.length <= 0)
+            return [{ label: "No disk stats available", value: "/" }];
+        for (let i = 0; i < root.diskMountList.length; i++) {
+            const mount = root.diskMountList[i];
+            const path = mount.mount || mount.device || "/";
+            options.push({ label: path, value: path });
         }
-
-        // ── Polling ───────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Polling"
-
-            PluginSettingsRow {
-                title: "Probe Interval"
-                subtitle: "How often to request fresh disk stats (ms)"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("probeInterval", 3000)
-                    min: 500
-                    max: 30000
-                    step: 500
-                    unit: "ms"
-                    onValueChanged: root.pluginData.setNumber("probeInterval", value)
-                }
-            }
-        }
-
-        // ── Appearance ────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Appearance"
-
-            PluginSettingsRow {
-                title: "Color Mode"
-                subtitle: "Vivid or soft palette for disk bars"
-                control: PluginSettingsSelector {
-                    options: ["vivid", "soft"]
-                    selected: root.pluginData.stringSetting("colorMode", "vivid")
-                    onSelected: root.pluginData.setString("colorMode", selected)
-                }
-            }
-
-            PluginSettingsRow {
-                title: "Bar Width"
-                subtitle: "Width of each disk bar in pixels"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("barWidth", 24)
-                    min: 8
-                    max: 80
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("barWidth", value)
-                }
-            }
-
-            PluginSettingsRow {
-                title: "Bar Gap"
-                subtitle: "Spacing between disk bars"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("barGap", 4)
-                    min: 1
-                    max: 20
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("barGap", value)
-                }
-            }
-
-            PluginSettingsRow {
-                title: "Corner Radius"
-                subtitle: "Rounding of the disk bar corners"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("cornerRadius", 6)
-                    min: 2
-                    max: 20
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("cornerRadius", value)
-                }
-            }
-        }
-
-        // ── Interaction ────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Interaction"
-
-            PluginSettingsRow {
-                title: "Popout Trigger"
-                subtitle: "How to open the detail popout"
-                control: PluginSettingsSelector {
-                    options: ["hover", "click"]
-                    selected: root.pluginData.stringSetting("popoutTriggerMode", "hover")
-                    onSelected: root.pluginData.setString("popoutTriggerMode", selected)
-                }
-            }
-        }
-
-        // ── Animation ─────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Animation"
-
-            PluginSettingsRow {
-                title: "Smoothing"
-                subtitle: "Animation smoothing factor (higher = more smoothing)"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("smoothingPercent", 15)
-                    min: 1
-                    max: 99
-                    step: 1
-                    unit: "%"
-                    onValueChanged: root.pluginData.setNumber("smoothingPercent", value)
-                }
-            }
-        }
+        return options;
     }
 }

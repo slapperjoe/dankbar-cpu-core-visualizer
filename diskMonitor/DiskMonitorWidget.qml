@@ -58,18 +58,20 @@ PluginComponent {
     readonly property real diskUsageValue: {
         if (root.selectedDiskMounts.length <= 0)
             return 0;
-        let weightedUsed = 0;
-        let weightedTotal = 0;
+        // Use percent directly from dgop output
+        let totalPercent = 0;
+        let count = 0;
         for (let i = 0; i < root.selectedDiskMounts.length; i++) {
             const mount = root.selectedDiskMounts[i];
-            const total = Number(mount && mount.total !== undefined ? mount.total : 0);
-            const used = Number(mount && mount.used !== undefined ? mount.used : 0);
-            weightedUsed += used;
-            weightedTotal += total;
+            const p = root.diskMountPercent(mount);
+            if (p >= 0) {
+                totalPercent += p;
+                count++;
+            }
         }
-        if (weightedTotal <= 0)
+        if (count <= 0)
             return 0;
-        return (weightedUsed / weightedTotal) * 100;
+        return totalPercent / root.selectedDiskMounts.length;
     }
 
     readonly property string diskUsageSubtitle: {
@@ -77,9 +79,8 @@ PluginComponent {
             return "Waiting for disk stats";
         if (root.selectedDiskMounts.length === 1) {
             const mount = root.selectedDiskMounts[0];
-            const total = Number(mount && mount.total !== undefined ? mount.total : 0);
-            if (total > 0)
-                return root.diskMountPath(mount) + "  " + root.formatStorage(mount.used) + " / " + root.formatStorage(total);
+            const percent = root.diskMountPercent(mount);
+            return root.diskMountPath(mount) + " " + percent.toFixed(0) + "%";
         }
         return root.diskSelectionLabel;
     }
@@ -91,9 +92,7 @@ PluginComponent {
         for (let i = 0; i < root.selectedDiskMounts.length; i++) {
             const mount = root.selectedDiskMounts[i];
             let part = root.diskMountPath(mount) + " " + root.diskMountPercent(mount).toFixed(0) + "%";
-            const total = Number(mount && mount.total !== undefined ? mount.total : 0);
-            if (total > 0)
-                part += "  |  " + root.formatStorage(mount.used) + " / " + root.formatStorage(total);
+            part += "  |  " + (mount.used || "0") + " / " + (mount.size || "0");
             parts.push(part);
         }
         return parts.join("   ");
@@ -133,14 +132,16 @@ PluginComponent {
         interval: root.probeIntervalMs
         running: true
         repeat: true
-        onTriggered: DgopService.updateAllStats()
+        onTriggered: {
+            DgopService.updateAllStats();
+            root.syncAnimatedDiskUsage(false);
+        }
     }
 
     property int probeIntervalMs: probeInterval
 
     Component.onCompleted: {
         root.isDesktopWidget = (root.barConfig === undefined || root.barConfig === null);
-        root.popoutTriggerMode = pluginData["popoutTriggerMode"] || "hover";
         root.colorMode = pluginData["colorMode"] || "vivid";
         root.barWidth = Number(pluginData["barWidth"]) || 24;
         root.barGap = Number(pluginData["barGap"]) || 4;
@@ -158,12 +159,16 @@ PluginComponent {
             root.selectedDiskMountPaths = ["/"];
         }
 
-        DgopService.addRef(["diskmounts"]);
+        DgopService.addRef(["cpu", "memory", "diskmounts", "processes", "network", "gpu"]);
+        DgopService.updateAllStats();
         root.syncAnimatedDiskUsage(true);
+        console.error("[diskMonitor] diskMounts:", JSON.stringify(DgopService.diskMounts));
+        console.error("[diskMonitor] diskMountList:", JSON.stringify(root.diskMountList));
+        console.error("[diskMonitor] selectedDiskMountPaths:", JSON.stringify(root.selectedDiskMountPaths));
     }
 
     Component.onDestruction: {
-        DgopService.removeRef(["diskmounts"]);
+        DgopService.removeRef(["cpu", "memory", "diskmounts", "processes", "network", "gpu"]);
     }
 
     // ── Functions ──────────────────────────────────────────────
@@ -174,23 +179,46 @@ PluginComponent {
     function diskMountPath(mount) {
         if (!mount)
             return "";
-        return String(mount.path || mount.device || "");
+        // dgop returns {device, mount, fstype, size, used, avail, percent}
+        if (mount.mount !== undefined && mount.mount !== null && String(mount.mount).length > 0)
+            return String(mount.mount);
+        return String(mount.device || "");
     }
 
     function diskMountPercent(mount) {
         if (!mount)
             return 0;
-        const total = Number(mount.total || 0);
-        const used = Number(mount.used || 0);
-        if (total <= 0)
-            return 0;
-        return (used / total) * 100;
+        // dgop provides percent as "9%" - parse directly
+        if (mount.percent !== undefined && mount.percent !== null) {
+            const parsed = Number(String(mount.percent).replace("%", ""));
+            if (!Number.isNaN(parsed))
+                return parsed;
+        }
+        // Fallback: compute from size/used (these are strings like "429.3G")
+        const total = root.parseStorage(mount.size);
+        const used = root.parseStorage(mount.used);
+        if (total > 0)
+            return (used / total) * 100;
+        return 0;
     }
 
     function diskMountHasUsage(mount) {
         if (!mount)
             return false;
-        return (mount.total !== undefined && mount.total > 0);
+        // dgop always provides percent, so just check it exists
+        return mount.percent !== undefined && mount.percent !== null;
+    }
+
+    function parseStorage(str) {
+        if (!str || typeof str !== "string")
+            return 0;
+        const match = str.match(/^([\d.]+)([A-Z])$/);
+        if (!match)
+            return 0;
+        const num = parseFloat(match[1]);
+        const unit = match[2].toUpperCase();
+        const multipliers = { "B": 1, "K": 1024, "M": 1024*1024, "G": 1024*1024*1024, "T": 1024*1024*1024*1024 };
+        return num * (multipliers[unit] || 1);
     }
 
     function formatStorage(bytes) {
@@ -244,8 +272,13 @@ PluginComponent {
         return (root.clampUsage(usage) / 100) * cardWidth;
     }
 
-    // ── Settings ────────────────────────────────────────────────
-    property string popoutTriggerMode: "hover"
+    // ── Reactive handlers ─────────────────────────────────
+    onSelectedDiskMountsChanged: {
+        root.syncAnimatedDiskUsage(root.animatedDiskUsages.length !== root.selectedDiskMounts.length);
+    }
+
+    // ── Popout trigger setting ────────────────────────────
+    property string popoutTriggerMode: pluginData["popoutTriggerMode"] || "click"
 
     // ── Pill badge ────────────────────────────────────────
     property int _badgeRefresh: 0
@@ -253,151 +286,116 @@ PluginComponent {
         return Math.round(root.diskUsageValue);
     }
 
-    readonly property real barThickness: root.barConfig ? root.barConfig.thickness : 40
+    property real barThickness: root.barConfig ? (root.barConfig.thickness || 40) : 40
 
     horizontalBarPill: Component {
-        MouseArea {
-            id: hPillMouseArea
-            implicitWidth: hContentRow.implicitWidth
-            implicitHeight: hContentRow.implicitHeight
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            hoverEnabled: root.popoutTriggerMode === "hover"
-            cursorShape: Qt.PointingHandCursor
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) {
-                    root.pillRightClickAction()
-                } else if (root.popoutTriggerMode === "click") {
-                    root.openPopout();
-                }
-            }
-            onEntered: {
-                if (root.popoutTriggerMode === "hover") {
-                    root.openPopout();
-                }
+        Row {
+            id: hContentRow
+            spacing: -6
+
+            DankIcon {
+                name: "storage"
+                size: Theme.iconSize - 6
+                color: "#FFFFFF"
+                filled: true
+                anchors.verticalCenter: parent.verticalCenter
             }
 
-            Row {
-                id: hContentRow
-                spacing: -6
+            Rectangle {
+                property int _force: root._badgeRefresh
+                visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
+                width: 14
+                height: width
+                radius: width / 2
+                color: Theme.primary
+                border.width: 1
+                border.color: Theme.surfaceContainerHigh
 
-                DankIcon {
-                    name: "harddisk"
-                    size: Theme.iconSize - 6
-                    color: "#FFFFFF"
-                    filled: true
+                StyledText {
+                    property int _force: parent._force
+                    anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Rectangle {
-                    property int _force: root._badgeRefresh
-                    visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
-                    width: 14
-                    height: width
-                    radius: width / 2
-                    color: Theme.primary
-                    border.width: 1
-                    border.color: Theme.surfaceContainerHigh
-
-                    StyledText {
-                        property int _force: parent._force
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.horizontalCenterOffset: -1
-                        anchors.verticalCenterOffset: 1
-                        text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
-                        color: Theme.surfaceContainerHigh
-                        font.pixelSize: 10
-                        font.weight: Font.Bold
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
+                    anchors.horizontalCenterOffset: -1
+                    anchors.verticalCenterOffset: 1
+                    text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
+                    color: Theme.surfaceContainerHigh
+                    font.pixelSize: 10
+                    font.weight: Font.Bold
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
         }
     }
 
     verticalBarPill: Component {
-        MouseArea {
-            id: vPillMouseArea
-            implicitWidth: vContentRow.implicitWidth
-            implicitHeight: vContentRow.implicitHeight
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            hoverEnabled: root.popoutTriggerMode === "hover"
-            cursorShape: Qt.PointingHandCursor
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) {
-                    root.pillRightClickAction()
-                } else if (root.popoutTriggerMode === "click") {
-                    root.openPopout();
-                }
-            }
-            onEntered: {
-                if (root.popoutTriggerMode === "hover") {
-                    root.openPopout();
-                }
+        Row {
+            id: vContentRow
+            spacing: -6
+
+            DankIcon {
+                name: "storage"
+                size: Theme.iconSize - 6
+                color: "#FFFFFF"
+                filled: true
+                anchors.verticalCenter: parent.verticalCenter
             }
 
-            Row {
-                id: vContentRow
-                spacing: -6
+            Rectangle {
+                property int _force: root._badgeRefresh
+                visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
+                width: 14
+                height: width
+                radius: width / 2
+                color: Theme.primary
+                border.width: 1
+                border.color: Theme.surfaceContainerHigh
 
-                DankIcon {
-                    name: "harddisk"
-                    size: Theme.iconSize - 6
-                    color: "#FFFFFF"
-                    filled: true
+                StyledText {
+                    property int _force: parent._force
+                    anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Rectangle {
-                    property int _force: root._badgeRefresh
-                    visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
-                    width: 14
-                    height: width
-                    radius: width / 2
-                    color: Theme.primary
-                    border.width: 1
-                    border.color: Theme.surfaceContainerHigh
-
-                    StyledText {
-                        property int _force: parent._force
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.horizontalCenterOffset: -1
-                        anchors.verticalCenterOffset: 1
-                        text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
-                        color: Theme.surfaceContainerHigh
-                        font.pixelSize: 10
-                        font.weight: Font.Bold
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
+                    anchors.horizontalCenterOffset: -1
+                    anchors.verticalCenterOffset: 1
+                    text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
+                    color: Theme.surfaceContainerHigh
+                    font.pixelSize: 10
+                    font.weight: Font.Bold
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
         }
     }
 
-    pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
-        root.openPopout();
-    }
-
-    function openPopout() {
+    // ── Popout triggers ────────────────────────────────
+    // Left-click always opens the popout (BasePill routes left-click here)
+    pillClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
         var popout = null;
-        var pill = null;
         for (var i = 0; i < root.children.length; i++) {
             var child = root.children[i];
             if (typeof child.setTriggerPosition === "function") {
                 popout = child;
-            }
-            if (typeof child.mapToItem === "function" && child.width !== undefined && child.width > 0 && typeof child.setTriggerPosition !== "function") {
-                pill = child;
+                break;
             }
         }
-        if (popout && pill) {
-            var globalPos = pill.mapToItem(null, 0, 0);
-            var screen = root.parentScreen || Screen;
-            var pos = SettingsData.getPopupTriggerPosition(globalPos, screen, root.barThickness, pill.width, 8, 0, null);
-            popout.setTriggerPosition(pos.x, pos.y, pos.width, root.section, screen, 0, root.barThickness, 8, null);
+        if (popout) {
+            popout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen);
+            popout.toggle();
+        }
+    }
+
+    pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
+        var popout = null;
+        for (var i = 0; i < root.children.length; i++) {
+            var child = root.children[i];
+            if (typeof child.setTriggerPosition === "function") {
+                popout = child;
+                break;
+            }
+        }
+        if (popout) {
+            popout.setTriggerPosition(posX, posY, posWidth, sectionName, currentScreen);
             popout.toggle();
         }
     }
@@ -408,11 +406,13 @@ PluginComponent {
             detailsText: root.diskUsageTooltipText
 
             Column {
-                anchors.fill: parent
+                width: parent.width
+                height: Math.max(48, 24 * root.selectedDiskMounts.length)
                 anchors.margins: 8
                 spacing: 8
 
                 Repeater {
+                    height: 16 * root.selectedDiskMounts.length
                     model: root.selectedDiskMounts
 
                     delegate: Row {
@@ -422,15 +422,13 @@ PluginComponent {
                             width: root.barWidth
                             height: 8
                             radius: 4
-                            color: root.colorFor(index)
+                            color: "#333333"
 
                             Rectangle {
-                                anchors.fill: parent
-                                anchors.rightMargin: (1 - (root.animatedDiskUsages[index] || 0) / 100) * parent.width
                                 width: (root.animatedDiskUsages[index] || 0) / 100 * parent.width
                                 height: parent.height
                                 radius: 4
-                                color: parent.color
+                                color: root.colorFor(index)
                                 opacity: 0.96
                             }
                         }
