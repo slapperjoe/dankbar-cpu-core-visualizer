@@ -4,7 +4,7 @@
     "description": "Network throughput monitor with rolling chart",
     "version": "0.1.0",
     "author": "Mark + Copilot",
-    "type": ["widget", "desktop-widget"],
+    "type": "widget",
     "capabilities": ["dankbar-widget", "monitoring", "network-visualizer"],
     "component": "./NetworkMonitorWidget.qml",
     "icon": "network",

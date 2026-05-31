@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import qs.Common
 import qs.Modules.Plugins
 import qs.Services
@@ -8,7 +9,6 @@ PluginSettings {
     id: root
 
     pluginId: "networkMonitor"
-    title: "Network Monitor"
 
     ColumnLayout {
         anchors.fill: parent
