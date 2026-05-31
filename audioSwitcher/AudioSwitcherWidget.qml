@@ -201,7 +201,7 @@ PluginComponent {
                 id: barIcon
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 8
+                anchors.bottomMargin: 7
                 name: root.currentDeviceIcon
                 size: Math.min(root.barThickness - 12, Theme.iconSize + 2)
                 color: Theme.widgetTextColor
@@ -265,7 +265,7 @@ PluginComponent {
                 id: vBarIcon
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -4
+                anchors.verticalCenterOffset: -3
                 name: root.currentDeviceIcon
                 size: Math.min(parent.width - 12, Theme.iconSize + 2)
                 color: Theme.widgetTextColor
