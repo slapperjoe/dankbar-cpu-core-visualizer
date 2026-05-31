@@ -15,8 +15,8 @@ PluginComponent {
     property var quickSwitchSinks: []
     property var enabledSinks: []
     property int _badgeRefresh: 0
-    readonly property real barThickness: root.barConfig ? root.barConfig.thickness : 40
-    readonly property real widgetThickness: root.barConfig ? root.barThickness : 40
+    // barThickness and widgetThickness are inherited from PluginComponent
+    // (barThickness: 48, widgetThickness: 30)
 
     property string currentDeviceName: {
         var sink = root.lastSelectedSink || AudioService.sink;
@@ -218,23 +218,33 @@ PluginComponent {
         return AudioService.displayName(sink) || sink.description || sink.name || "Audio output";
     }
 
-    // ── Bar Widget (icon-only, no text) ─────────────────────
+    // ── Bar Widget (icon + badge, no text) ─────────────────────
     horizontalBarPill: Component {
-        Item {
-            implicitWidth: root.barThickness
-            implicitHeight: root.widgetThickness
+        MouseArea {
+            implicitWidth: hContentRow.implicitWidth
+            implicitHeight: hContentRow.implicitHeight
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton) {
+                    root.pillRightClickAction()
+                } else {
+                    root.pillClickAction()
+                }
+            }
 
             Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.verticalCenter: parent.verticalCenter
+                id: hContentRow
                 spacing: -6
 
                 DankIcon {
                     id: barIcon
                     name: root.currentDeviceIcon
-                    size: Math.min(parent.parent.height - 8, Theme.iconSize - 2)
+                    size: Theme.iconSize - 6
                     color: "#FFFFFF"
                     filled: true
+                    anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Rectangle {
@@ -263,35 +273,35 @@ PluginComponent {
                     }
                 }
             }
-
-            MouseArea {
-                id: pillMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    root.logToFile("[AudioSwitcher] Left-click: cycling to next sink");
-                    root.cycleToNextSink();
-                }
-            }
         }
     }
 
     verticalBarPill: Component {
-        Item {
-            implicitWidth: root.barThickness
-            implicitHeight: root.widgetThickness
+        MouseArea {
+            implicitWidth: vContentRow.implicitWidth
+            implicitHeight: vContentRow.implicitHeight
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton) {
+                    root.pillRightClickAction()
+                } else {
+                    root.pillClickAction()
+                }
+            }
 
             Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.verticalCenter: parent.verticalCenter
+                id: vContentRow
                 spacing: -6
 
                 DankIcon {
                     id: vBarIcon
                     name: root.currentDeviceIcon
-                    size: Math.min(parent.parent.height - 8, Theme.iconSize - 2)
+                    size: Theme.iconSize - 6
                     color: "#FFFFFF"
                     filled: true
+                    anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Rectangle {
@@ -318,16 +328,6 @@ PluginComponent {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
-                }
-            }
-
-            MouseArea {
-                id: pillMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    root.logToFile("[AudioSwitcher] Left-click: cycling to next sink");
-                    root.cycleToNextSink();
                 }
             }
         }
@@ -398,7 +398,8 @@ PluginComponent {
             ListView {
                 id: sinkListView
                 width: parent.width
-                height: Math.max(0, root.audioSinks.length * (48 + 4))
+                spacing: Theme.spacingS
+                height: Math.max(0, root.audioSinks.length * 48 + Math.max(0, root.audioSinks.length - 1) * Theme.spacingS)
                 model: root.audioSinks
                 clip: true
 

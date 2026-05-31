@@ -4,7 +4,7 @@
     "description": "Audio output switcher with sink selection",
     "version": "1.1.0",
     "author": "Mark + Copilot",
-    "type": ["widget", "desktop-widget"],
+    "type": "widget",
     "capabilities": ["dankbar-widget", "monitoring", "audio-switcher"],
     "component": "./AudioSwitcherWidget.qml",
     "icon": "volume_up",
