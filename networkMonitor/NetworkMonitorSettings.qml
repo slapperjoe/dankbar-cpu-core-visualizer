@@ -1,6 +1,8 @@
 import QtQuick
 import qs.Common
 import qs.Modules.Plugins
+import qs.Services
+import qs.Widgets
 
 PluginSettings {
     id: root
@@ -16,7 +18,7 @@ PluginSettings {
 
     StyledText {
         width: parent.width
-        text: "Settings will be added in a future update."
+        text: "Configure polling, appearance, and chart options."
         font.pixelSize: Theme.fontSizeSmall
         color: Theme.surfaceVariantText
         wrapMode: Text.WordWrap

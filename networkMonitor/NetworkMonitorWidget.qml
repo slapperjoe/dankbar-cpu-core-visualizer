@@ -229,14 +229,13 @@ PluginComponent {
                 // Mini chart
                 Rectangle {
                     width: root.chartWidth
-                    height: Math.max(10, root.pillFontSize + 4)
+                    height: Math.max(10, root.pillFontSize)
                     radius: 3
                     color: Theme.surfaceContainer
                     clip: true
 
                     NetworkHistoryChart {
                         anchors.fill: parent
-                        anchors.margins: 1
                         downloadSeries: root.downloadHistory
                         uploadSeries: root.uploadHistory
                         downloadPeak: root.downloadPeak
@@ -295,7 +294,7 @@ PluginComponent {
 
                 Rectangle {
                     width: Math.max(24, root.chartWidth * 0.5)
-                    height: Math.max(24, root.barThickness * 1.2)
+                    height: Math.max(16, root.pillFontSize * 2)
                     anchors.horizontalCenter: parent.horizontalCenter
                     radius: 3
                     color: Theme.surfaceContainer
@@ -303,7 +302,6 @@ PluginComponent {
 
                     NetworkHistoryChart {
                         anchors.fill: parent
-                        anchors.margins: 1
                         downloadSeries: root.downloadHistory
                         uploadSeries: root.uploadHistory
                         downloadPeak: root.downloadPeak
