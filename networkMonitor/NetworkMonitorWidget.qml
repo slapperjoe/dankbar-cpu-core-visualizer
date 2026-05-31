@@ -189,8 +189,6 @@ PluginComponent {
         return Theme.barTextSize(root.barThickness, fontScale, maximizeText);
     }
 
-    readonly property real barThickness: root.barConfig ? root.barConfig.thickness : 40
-
     // ── Pill layouts ────────────────────────────────────────────
     horizontalBarPill: Component {
         MouseArea {
