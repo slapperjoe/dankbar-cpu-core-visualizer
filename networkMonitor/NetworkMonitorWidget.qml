@@ -183,14 +183,6 @@ PluginComponent {
         }
     }
 
-    // ── TextMetrics for stable label widths ─────────────────────
-    TextMetrics {
-        id: speedLabelMetrics
-        font.pixelSize: Math.min(11, Math.max(7, root.overallTextSize() - 1))
-        font.weight: Font.Medium
-        text: "888.8M/s"  // worst-case width template
-    }
-
     function overallTextSize() {
         const fontScale = root.barConfig ? root.barConfig.fontScale : undefined;
         const maximizeText = root.barConfig ? root.barConfig.maximizeWidgetText : undefined;
@@ -199,15 +191,6 @@ PluginComponent {
 
     readonly property real barThickness: root.barConfig ? root.barConfig.thickness : 40
     readonly property real pillFontSize: Math.min(11, Math.max(7, root.overallTextSize() - 1))
-    readonly property real labelSlotWidth: Math.ceil(speedLabelMetrics.advanceWidth) + 6
-    readonly property real arrowSlotWidth: Math.ceil(arrowMetrics.advanceWidth) + 2
-
-    TextMetrics {
-        id: arrowMetrics
-        font.pixelSize: Math.min(11, Math.max(7, root.overallTextSize() - 1))
-        font.weight: Font.Medium
-        text: "↓"
-    }
 
     // ── Bar Pill (compact) ─────────────────────────────────────
     horizontalBarPill: Component {
@@ -226,59 +209,34 @@ PluginComponent {
 
             Row {
                 id: hContentRow
-                spacing: 2
+                spacing: -6
 
                 DankIcon {
-                    id: barIcon
-                    name: "network"
-                    size: Theme.iconSize - 4
+                    name: "wifi"
+                    size: Theme.iconSize - 6
                     color: "#FFFFFF"
                     filled: true
-                    anchors.verticalCenter: parent.verticalCenter
                 }
 
                 // Download label
-                Item {
-                    width: root.labelSlotWidth + 2
-                    height: hDownloadArrowText.implicitHeight
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    StyledText {
-                        id: hDownloadSpeedText
-                        anchors.left: parent.left
-                        anchors.right: hDownloadArrowText.left
-                        anchors.rightMargin: 1
-                        anchors.verticalCenter: parent.verticalCenter
-                        horizontalAlignment: Text.AlignRight
-                        text: root.formatCompactSpeed(root.currentDownloadRate)
-                        color: root.downloadColor
-                        font.pixelSize: root.pillFontSize
-                        font.weight: Font.Medium
-                    }
-                    StyledText {
-                        id: hDownloadArrowText
-                        width: root.arrowSlotWidth
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "↓"
-                        color: root.downloadColor
-                        font.pixelSize: root.pillFontSize
-                        font.weight: Font.Medium
-                    }
+                StyledText {
+                    text: "↓ " + root.formatCompactSpeed(root.currentDownloadRate)
+                    color: root.downloadColor
+                    font.pixelSize: root.pillFontSize
+                    font.weight: Font.Medium
                 }
 
                 // Mini chart
                 Rectangle {
                     width: root.chartWidth
-                    height: Math.max(12, root.barThickness - 8)
-                    anchors.verticalCenter: parent.verticalCenter
-                    radius: Math.min(4, height / 2)
+                    height: Math.max(10, root.pillFontSize + 4)
+                    radius: 3
                     color: Theme.surfaceContainer
                     clip: true
 
                     NetworkHistoryChart {
                         anchors.fill: parent
-                        anchors.margins: 2
+                        anchors.margins: 1
                         downloadSeries: root.downloadHistory
                         uploadSeries: root.uploadHistory
                         downloadPeak: root.downloadPeak
@@ -291,32 +249,11 @@ PluginComponent {
                 }
 
                 // Upload label
-                Item {
-                    width: root.labelSlotWidth + 2
-                    height: hUploadSpeedText.implicitHeight
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    StyledText {
-                        id: hUploadArrowText
-                        width: root.arrowSlotWidth
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "↑"
-                        color: root.uploadColor
-                        font.pixelSize: root.pillFontSize
-                        font.weight: Font.Medium
-                    }
-                    StyledText {
-                        id: hUploadSpeedText
-                        anchors.left: hUploadArrowText.right
-                        anchors.leftMargin: 1
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.formatCompactSpeed(root.currentUploadRate)
-                        color: root.uploadColor
-                        font.pixelSize: root.pillFontSize
-                        font.weight: Font.Medium
-                    }
+                StyledText {
+                    text: "↑ " + root.formatCompactSpeed(root.currentUploadRate)
+                    color: root.uploadColor
+                    font.pixelSize: root.pillFontSize
+                    font.weight: Font.Medium
                 }
             }
         }
@@ -341,44 +278,32 @@ PluginComponent {
                 spacing: 1
 
                 DankIcon {
-                    name: "network"
-                    size: Theme.iconSize - 4
+                    name: "wifi"
+                    size: Theme.iconSize - 6
                     color: "#FFFFFF"
                     filled: true
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
 
-                // Download label
-                Row {
+                StyledText {
+                    text: "↓" + root.formatCompactSpeed(root.currentDownloadRate)
+                    color: root.downloadColor
+                    font.pixelSize: root.pillFontSize - 1
+                    font.weight: Font.Medium
                     anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 1
-
-                    StyledText {
-                        text: root.formatCompactSpeed(root.currentDownloadRate)
-                        color: root.downloadColor
-                        font.pixelSize: root.pillFontSize - 1
-                        font.weight: Font.Medium
-                    }
-                    StyledText {
-                        text: "↓"
-                        color: root.downloadColor
-                        font.pixelSize: root.pillFontSize - 1
-                        font.weight: Font.Medium
-                    }
                 }
 
-                // Mini chart
                 Rectangle {
-                    width: Math.max(24, root.chartWidth * 0.6)
-                    height: Math.max(30, root.barThickness * 1.2)
+                    width: Math.max(24, root.chartWidth * 0.5)
+                    height: Math.max(24, root.barThickness * 1.2)
                     anchors.horizontalCenter: parent.horizontalCenter
-                    radius: Math.min(4, width / 3)
+                    radius: 3
                     color: Theme.surfaceContainer
                     clip: true
 
                     NetworkHistoryChart {
                         anchors.fill: parent
-                        anchors.margins: 2
+                        anchors.margins: 1
                         downloadSeries: root.downloadHistory
                         uploadSeries: root.uploadHistory
                         downloadPeak: root.downloadPeak
@@ -390,23 +315,12 @@ PluginComponent {
                     }
                 }
 
-                // Upload label
-                Row {
+                StyledText {
+                    text: "↑" + root.formatCompactSpeed(root.currentUploadRate)
+                    color: root.uploadColor
+                    font.pixelSize: root.pillFontSize - 1
+                    font.weight: Font.Medium
                     anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 1
-
-                    StyledText {
-                        text: "↑"
-                        color: root.uploadColor
-                        font.pixelSize: root.pillFontSize - 1
-                        font.weight: Font.Medium
-                    }
-                    StyledText {
-                        text: root.formatCompactSpeed(root.currentUploadRate)
-                        color: root.uploadColor
-                        font.pixelSize: root.pillFontSize - 1
-                        font.weight: Font.Medium
-                    }
                 }
             }
         }
