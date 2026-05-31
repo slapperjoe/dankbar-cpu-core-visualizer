@@ -5,7 +5,6 @@ import qs.Modules.Plugins
 import qs.Services
 import qs.Widgets
 import QtQuick.Layouts 6.7
-import io.github.dankmachines.dankmaterialshell.theming 1.0 as Theme
 
 PluginComponent {
     id: root
@@ -368,8 +367,8 @@ PluginComponent {
         }
 
         // DankBar widget
-        visible: !root.isDesktopWidget
         Rectangle {
+            visible: !root.isDesktopWidget
             anchors.fill: parent
             color: "transparent"
 

@@ -41,7 +41,7 @@ PluginComponent {
         const sinks = AudioService.getAvailableSinks();
         if (Array.isArray(sinks)) {
             root.audioSinks = sinks;
-            root.logToFile("Found " + root.audioSinks.length + " sinks");
+    
 
             // Load persisted enabled sinks
             var stored = pluginData["audioQuickSwitchEnabledSinks"];
@@ -65,13 +65,10 @@ PluginComponent {
             for (let i = 0; i < root.audioSinks.length; i++) {
                 if (AudioService.sink && root.audioSinks[i].name === AudioService.sink.name) {
                     root.activeSinkIndex = i;
-                    root.logToFile("Active sink: " + i + " - " + AudioService.displayName(AudioService.sink));
                     root.updateBarBadges();
                     return;
                 }
             }
-
-            // If no active sink found, still update badges
             root.updateBarBadges();
         } else {
             // Fallback: if getAvailableSinks() fails, try to use the active sink
@@ -80,17 +77,13 @@ PluginComponent {
                 root.enabledSinks = [AudioService.sink.name];
                 root.quickSwitchSinks = [AudioService.sink];
                 root.activeSinkIndex = 0;
-                root.logToFile("Fallback: using active sink " + AudioService.sink.name);
             } else {
                 root.audioSinks = [];
                 root.quickSwitchSinks = [];
                 root.enabledSinks = [];
-                root.logToFile("AudioService not available");
             }
             root.updateBarBadges();
         }
-        root.activeSinkIndex = 0;
-    }
 
     Timer {
         id: refreshTimer
@@ -110,9 +103,7 @@ PluginComponent {
     }
 
     Component.onCompleted: {
-        root.logToFile("[AudioSwitcher] Loading plugin...");
         root.refreshAudioSinks();
-        root.logToFile("[AudioSwitcher] Loaded");
         root.updateCurrentVolume();
     }
 
@@ -124,19 +115,6 @@ PluginComponent {
         var sink = root.lastSelectedSink || AudioService.sink;
         if (sink && sink.audio && sink.audio.volume !== undefined) {
             root.currentVolume = Math.round(sink.audio.volume * 100);
-        }
-    }
-
-    function logToFile(message) {
-        console.error("[AudioSwitcher]", message);
-        try {
-            var logFile = new File("/tmp/dms-audioSwitcher.log");
-            if (logFile.open(File.AppendOnly)) {
-                logFile.writeLine("[" + new Date().toISOString() + "] " + message);
-                logFile.close();
-            }
-        } catch(e) {
-            // File logging failed, stderr still works
         }
     }
 
@@ -160,7 +138,6 @@ PluginComponent {
             Pipewire.preferredDefaultAudioSink = sink;
         }
         // Don't set lastSelectedSink here — let onSinkChanged update it reactively
-        root.logToFile("Selected: " + sink.name);
         return true;
     }
 
@@ -187,8 +164,6 @@ PluginComponent {
         } else {
             Pipewire.preferredDefaultAudioSink = nextSink;
         }
-        // Don't set lastSelectedSink — let onSinkChanged update it reactively
-        root.logToFile("Cycled to: " + (nextSink.name || "unknown"));
         return true;
     }
 
@@ -348,7 +323,6 @@ PluginComponent {
     }
 
     pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
-        root.logToFile("[AudioSwitcher] Right-click: opening popout");
         root.openPopout();
     }
 
@@ -381,7 +355,6 @@ PluginComponent {
         if (index >= 0) {
             // Don't disable the currently active sink
             if (root.isSinkActive(sink)) {
-                root.logToFile("Cannot disable currently active sink: " + sink.name);
                 return;
             }
             enabled.splice(index, 1);
@@ -396,7 +369,6 @@ PluginComponent {
         root.quickSwitchSinks = root.audioSinks.filter(function(s) {
             return s.name && copy.includes(s.name);
         });
-        root.logToFile("Enabled sinks: " + copy);
     }
 
     popoutContent: Component {
