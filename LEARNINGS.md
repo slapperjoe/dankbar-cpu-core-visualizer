@@ -140,6 +140,15 @@
 - `Pipewire.preferredDefaultAudioSink = sink` is still used to change the active output
 - The pill used `DankRipple` for press animation (matching main branch)
 
+## Do NOT shadow barThickness
+
+- `PluginComponent` already provides `barThickness: 48` and `widgetThickness: 30`
+- **Never** redefine `readonly property real barThickness` in your widget — it overrides the inherited value
+- Shadowing with a fallback like `root.barConfig ? root.barConfig.thickness : 40` causes a default drop from 48 → 40px
+- This pushes the pill down by 8px, creating persistent vertical misalignment
+- diskMonitor and audioSwitcher do NOT shadow `barThickness` — follow their pattern
+- memoryMonitor and gpuMonitor DO shadow it and may have the same alignment bug
+
 ## Required Imports for Widget Plugins
 - `import qs.Services` is REQUIRED for `ToastService` (in `dms/Services/ToastService.qml`) and `AudioService` (in `dms/Services/AudioService.qml`)
 - Without `import qs.Services`, both are undefined → QML compilation failure → plugin won't load
