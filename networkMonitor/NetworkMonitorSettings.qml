@@ -9,6 +9,7 @@ PluginSettings {
     id: root
 
     pluginId: "networkMonitor"
+    title: "Network Monitor"
 
     ColumnLayout {
         anchors.fill: parent
@@ -24,7 +25,7 @@ PluginSettings {
                 title: "Probe Interval"
                 subtitle: "How often to request fresh network stats (ms)"
                 control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("probeInterval", 2000)
+                    value: root.pluginData.numberSetting("probeInterval", 1000)
                     min: 500
                     max: 30000
                     step: 500
@@ -89,10 +90,11 @@ PluginSettings {
             }
             PluginSettingsRow {
                 title: "Grid Lines"
-                subtitle: "Show horizontal grid lines on the chart"
-                control: PluginSettingsToggle {
-                    checked: root.pluginData.boolSetting("showNetworkGrid", true)
-                    onToggled: root.pluginData.setBool("showNetworkGrid", checked)
+                subtitle: "Show or hide horizontal grid lines on charts"
+                control: PluginSettingsSelector {
+                    options: ["Show", "Hide"]
+                    selected: root.pluginData.boolSetting("showNetworkGrid", true) ? "Show" : "Hide"
+                    onSelected: root.pluginData.setBool("showNetworkGrid", selected === "Show")
                 }
             }
 

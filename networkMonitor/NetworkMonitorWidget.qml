@@ -21,8 +21,8 @@ PluginComponent {
     property int _chartRefresh: 0
 
     // ── Derived properties ─────────────────────────────────────
-    readonly property real currentDownloadRate: Math.max(0, Number(DgopService.networkRxRate || 0))
-    readonly property real currentUploadRate: Math.max(0, Number(DgopService.networkTxRate || 0))
+    property real currentDownloadRate: 0
+    property real currentUploadRate: 0
 
     readonly property real downloadPeak: root.networkPeak(root.downloadHistory, root.currentDownloadRate)
     readonly property real uploadPeak: root.networkPeak(root.uploadHistory, root.currentUploadRate)
@@ -43,7 +43,7 @@ PluginComponent {
 
     // ── Settings load ──────────────────────────────────────────
     Component.onCompleted: {
-        root.probeIntervalMs = Math.max(500, Math.min(30000, Math.round(pluginData.numberSetting("probeInterval", 2000))));
+        root.probeIntervalMs = Math.max(500, Math.min(30000, Math.round(pluginData.numberSetting("probeInterval", 1000))));
         root.colorMode = pluginData.stringSetting("colorMode", "vivid");
         root.chartHeight = Math.max(40, Math.min(200, Math.round(pluginData.numberSetting("chartHeight", 80))));
         root.historySize = Math.max(10, Math.min(120, Math.round(pluginData.numberSetting("historySize", 60))));
@@ -68,6 +68,8 @@ PluginComponent {
         repeat: true
         onTriggered: {
             DgopService.updateAllStats();
+            root.currentDownloadRate = Math.max(0, Number(DgopService.networkRxRate || 0));
+            root.currentUploadRate = Math.max(0, Number(DgopService.networkTxRate || 0));
             root.appendNetworkHistorySample(root.currentDownloadRate, root.currentUploadRate);
             root._chartRefresh += 1;
         }

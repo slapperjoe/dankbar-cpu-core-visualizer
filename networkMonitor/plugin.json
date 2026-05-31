@@ -7,7 +7,7 @@
     "type": "widget",
     "capabilities": ["dankbar-widget", "monitoring", "network-visualizer"],
     "component": "./NetworkMonitorWidget.qml",
-    "icon": "network",
+    "icon": "wifi",
     "settings": "./NetworkMonitorSettings.qml",
     "permissions": [
         "settings_read",
