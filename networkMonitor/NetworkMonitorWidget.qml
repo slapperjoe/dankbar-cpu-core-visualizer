@@ -194,8 +194,8 @@ PluginComponent {
     // ── Pill layouts ────────────────────────────────────────────
     horizontalBarPill: Component {
         MouseArea {
-            implicitWidth: hContentRow.implicitWidth
-            implicitHeight: hContentRow.implicitHeight
+            implicitWidth: hContentRow.implicitWidth + 24
+            implicitHeight: root.barThickness
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
@@ -208,6 +208,7 @@ PluginComponent {
 
             Row {
                 id: hContentRow
+                anchors.centerIn: parent
                 spacing: 2
 
                 // Download label
@@ -256,11 +257,10 @@ PluginComponent {
 
     verticalBarPill: Component {
         MouseArea {
-            implicitWidth: vContentColumn.implicitWidth
-            implicitHeight: vContentColumn.implicitHeight
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+            implicitWidth: vContentColumn.implicitWidth + 16
+            implicitHeight: root.barThickness
             onClicked: mouse => {
                 if (mouse.button === Qt.RightButton)
                     root.pillRightClickAction();
@@ -270,6 +270,7 @@ PluginComponent {
 
             Column {
                 id: vContentColumn
+                anchors.centerIn: parent
                 spacing: 1
 
                 StyledText {
