@@ -15,6 +15,37 @@ PluginSettings {
         anchors.margins: 8
         spacing: 8
 
+        // ── Disk Mounts ────────────────────────────────────
+        PluginSettingsGroup {
+            Layout.fillWidth: true
+            title: "Disk Mounts"
+
+            readonly property var diskMountList: Array.isArray(DgopService.diskMounts) ? DgopService.diskMounts : []
+
+            readonly property var mountOptions: {
+                let options = [];
+                if (!Array.isArray(root.diskMountList) || root.diskMountList.length <= 0)
+                    return [{ label: "No disk stats available", value: "/" }];
+                for (let i = 0; i < root.diskMountList.length; i++) {
+                    const mount = root.diskMountList[i];
+                    const path = mount.path || mount.device || "/";
+                    options.push({ label: path, value: path });
+                }
+                return options;
+            }
+
+            PluginSettingsRow {
+                title: "Monitored Mounts"
+                subtitle: "Pick which disk mounts to track"
+                control: PluginSettingsSelector {
+                    property var _mountOptions: root.mountOptions
+                    options: _mountOptions
+                    selected: root.pluginData.stringSetting("selectedDiskMountPath", "/")
+                    onSelected: root.pluginData.setString("selectedDiskMountPath", selected)
+                }
+            }
+        }
+
         // ── Polling ───────────────────────────────────────
         PluginSettingsGroup {
             Layout.fillWidth: true
