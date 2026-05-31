@@ -165,12 +165,20 @@ PluginComponent {
         root.probeInterval = Math.max(500, Math.min(30000, Number(pluginData["probeInterval"]) || 3000));
         root.probeIntervalMs = root.probeInterval;
         root.popoutTriggerMode = pluginData["popoutTriggerMode"] || "click";
-        var storedPaths = pluginData["selectedDiskMountPaths"];
+        var storedStr = pluginData["selectedDiskMountPaths"];
+        var storedPaths;
+        if (storedStr && typeof storedStr === "string") {
+            try {
+                storedPaths = JSON.parse(storedStr);
+            } catch (e) {
+                storedPaths = ["/"];
+            }
+        } else {
+            storedPaths = ["/"];
+        }
         if (Array.isArray(storedPaths) && storedPaths.length > 0) {
-            // Clean up invalid paths like "//", "///", etc.
             var validPaths = storedPaths.filter(function(p) {
-                if (!p || p.trim().length === 0) return false;
-                // Reject paths with multiple consecutive slashes (artifacts of the old bug)
+                if (typeof p !== "string" || p.trim().length === 0) return false;
                 if (p.indexOf("//") !== -1) return false;
                 return true;
             });
@@ -439,17 +447,23 @@ PluginComponent {
     property var _popoutInstance: null
 
     function openPopout() {
-        // Use PluginComponent's showPopout if available
-        if (typeof root.showPopout === "function") {
-            root.showPopout(root.popoutContent);
-        } else if (!root._popoutInstance || !root._popoutInstance.visible) {
-            var popout = root.popoutContent.createObject(root, {"parent": root});
-            if (popout) {
-                root._popoutInstance = popout;
-                popout.show();
+        var popout = null;
+        var pill = null;
+        for (var i = 0; i < root.children.length; i++) {
+            var child = root.children[i];
+            if (typeof child.setTriggerPosition === "function") {
+                popout = child;
             }
-        } else {
-            root._popoutInstance.toggle();
+            if (typeof child.mapToItem === "function" && child.width !== undefined && child.width > 0 && typeof child.setTriggerPosition !== "function") {
+                pill = child;
+            }
+        }
+        if (popout && pill) {
+            var globalPos = pill.mapToItem(null, 0, 0);
+            var screen = root.parentScreen || Screen;
+            var pos = SettingsData.getPopupTriggerPosition(globalPos, screen, root.barThickness, pill.width, 8, 0, null);
+            popout.setTriggerPosition(pos.x, pos.y, pos.width, root.section, screen, 0, root.barThickness, 8, null);
+            popout.toggle();
         }
     }
 

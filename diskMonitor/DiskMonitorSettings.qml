@@ -35,9 +35,15 @@ PluginSettings {
             return [{ label: "No disk stats available", value: "/" }];
         for (let i = 0; i < root.diskMountList.length; i++) {
             const mount = root.diskMountList[i];
-            const path = mount.mount || mount.device || "/";
-            options.push({ label: path, value: path });
+            const mountPath = (mount.mount && String(mount.mount).length > 0) ? String(mount.mount) :
+                               (mount.device && String(mount.device).length > 0) ? String(mount.device) : "/";
+            // Skip if path looks invalid
+            if (!mountPath || mountPath.indexOf("//") !== -1)
+                continue;
+            options.push({ label: mountPath, value: mountPath });
         }
+        if (options.length === 0)
+            return [{ label: "No disk stats available", value: "/" }];
         return options;
     }
 
@@ -77,13 +83,12 @@ PluginSettings {
                 model: root.selectedMountPaths
 
                 delegate: Rectangle {
-                    property string mountPath: modelData
                     width: pillRow.implicitWidth + 32
-                    height: 36
-                    radius: 18
-                    color: Theme.primaryContainer
+                    height: 28
+                    radius: 14
+                    color: Theme.surfaceVariant
                     border.width: 1
-                    border.color: Theme.withAlpha(Theme.primary, 0.3)
+                    border.color: Theme.outline
 
                     Row {
                         id: pillRow
@@ -93,8 +98,8 @@ PluginSettings {
                         spacing: 6
 
                         StyledText {
-                            text: parent.mountPath || "unknown"
-                            color: Theme.onPrimaryContainer
+                            text: typeof modelData === "string" && modelData.length > 0 && modelData !== "undefined" && modelData !== "null" ? modelData : "unknown"
+                            color: Theme.onSurfaceVariant
                             font.pixelSize: Theme.fontSizeSmall
                             font.weight: Font.Medium
                         }
@@ -121,7 +126,7 @@ PluginSettings {
                                 onClicked: {
                                     var copy = root.selectedMountPaths.filter(function(p) { return p !== modelData; });
                                     root.selectedMountPaths = copy;
-                                    root.saveValue("selectedDiskMountPaths", copy);
+                                    root.saveValue("selectedDiskMountPaths", JSON.stringify(copy));
                                 }
                             }
                         }
@@ -133,12 +138,20 @@ PluginSettings {
 
     // Load saved mount list when settings component is ready
     Component.onCompleted: {
-        var loaded = root.loadValue("selectedDiskMountPaths", ["/"]);
+        var storedStr = root.loadValue("selectedDiskMountPaths", "");
+        var loaded;
+        if (storedStr && typeof storedStr === "string" && storedStr !== "") {
+            try {
+                loaded = JSON.parse(storedStr);
+            } catch (e) {
+                loaded = ["/"];
+            }
+        } else {
+            loaded = ["/"];
+        }
         var valid = loaded.filter(function(p) {
-            if (p === undefined || p === null) return false;
-            var str = String(p);
-            if (str.trim().length === 0) return false;
-            if (str.indexOf("//") !== -1) return false;
+            if (typeof p !== "string" || p.trim().length === 0) return false;
+            if (p.indexOf("//") !== -1) return false;
             return true;
         });
         if (valid.length === 0) {
@@ -153,7 +166,7 @@ PluginSettings {
     // Add mount dropdown
     SelectionSetting {
         id: addMountPicker
-        settingKey: ""
+        settingKey: "_tempMountPicker"
         label: "Add Disk Mount"
         description: "Pick a mount to add to the monitored list"
         options: root.diskMountOptions
@@ -165,20 +178,18 @@ PluginSettings {
         target: addMountPicker
         function onValueChanged() {
             const val = addMountPicker.value;
-            if (val && val !== "" && val.indexOf("//") === -1) {
-                // Avoid duplicates
+            if (typeof val === "string" && val !== "" && val.indexOf("//") === -1) {
                 if (root.selectedMountPaths.indexOf(val) === -1) {
                     var copy = root.selectedMountPaths.slice();
                     copy.push(val);
                     root.selectedMountPaths = copy;
-                    root.saveValue("selectedDiskMountPaths", copy);
+                    root.saveValue("selectedDiskMountPaths", JSON.stringify(copy));
                 }
+                // Reset picker to empty
                 addMountPicker.value = "";
             }
         }
     }
-
-
 
     // ── Polling ───────────────────────────────────────
     SliderSetting {
