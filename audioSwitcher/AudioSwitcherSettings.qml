@@ -15,12 +15,12 @@ PluginSettings {
     Timer {
         id: sinksTimer
         interval: 1000
-        repeat: false
+        repeat: true
         running: true
         onTriggered: {
             try {
                 var sinks = AudioService.getAvailableSinks();
-                if (Array.isArray(sinks) && sinks.length > 0) {
+                if (sinks && Array.isArray(sinks)) {
                     root.audioSinks = sinks;
                     // Load persisted enabled sinks
                     var stored = pluginData["audioQuickSwitchEnabledSinks"];
@@ -33,12 +33,11 @@ PluginSettings {
                         enabledNames = root.audioSinks.map(function(s) { return s.name; });
                     }
                     root.enabledSinks = enabledNames;
+                    // Stop retrying once we have data
+                    sinksTimer.stop();
                 }
             } catch (e) {
-                // Retry after delay
-                sinksTimer.interval = 2000;
-                sinksTimer.repeat = true;
-                sinksTimer.start();
+                // Keep retrying
             }
         }
     }

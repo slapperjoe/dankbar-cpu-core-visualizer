@@ -97,6 +97,14 @@ PluginComponent {
         onTriggered: root.refreshAudioSinks()
     }
 
+    Connections {
+        target: AudioService
+        function onSinkChanged() {
+            root.lastSelectedSink = AudioService.sink;
+            root.updateBarBadges();
+        }
+    }
+
     Component.onCompleted: {
         root.logToFile("[AudioSwitcher] Loading plugin...");
         root.refreshAudioSinks();
@@ -123,11 +131,13 @@ PluginComponent {
 
     function isSinkActive(sink) {
         if (!sink) return false;
-        // Check against last selected sink first (immediate UI feedback)
-        if (root.lastSelectedSink && sink.name && root.lastSelectedSink.name === sink.name)
+        // Check against AudioService.sink first (current system state)
+        if (AudioService.sink && sink.name && AudioService.sink.name && sink.name === AudioService.sink.name)
             return true;
-        // Fall back to AudioService.sink
-        return Boolean(AudioService.sink && sink.name && AudioService.sink.name && sink.name === AudioService.sink.name);
+        // Fall back to last selected sink (immediate UI feedback)
+        if (root.lastSelectedSink && sink.name && root.lastSelectedSink.name && sink.name === root.lastSelectedSink.name)
+            return true;
+        return false;
     }
 
     function selectAudioOutput(sink) {
@@ -396,10 +406,11 @@ PluginComponent {
                 clip: true
 
                 delegate: Rectangle {
+                    property var sink: modelData
                     width: parent.width
                     height: 48
                     radius: Theme.cornerRadius
-                    color: root.isSinkActive(modelData) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+                    color: root.isSinkActive(sink) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
                     // Active indicator bar at bottom
                     Rectangle {
@@ -408,8 +419,8 @@ PluginComponent {
                         width: parent.width
                         height: 2
                         radius: 1
-                        color: root.isSinkActive(modelData) ? Theme.primary : "transparent"
-                        visible: root.isSinkActive(modelData)
+                        color: root.isSinkActive(sink) ? Theme.primary : "transparent"
+                        visible: root.isSinkActive(sink)
                     }
 
                     Row {
@@ -422,15 +433,15 @@ PluginComponent {
                             id: sinkIconItem
                             width: Theme.iconSize
                             height: width
-                            name: root.sinkIconName(modelData)
-                            color: root.isSinkActive(modelData) ? Theme.primary : Theme.surfaceText
+                            name: root.sinkIconName(sink)
+                            color: root.isSinkActive(sink) ? Theme.primary : Theme.surfaceText
                             filled: true
                         }
 
                         // Cycle position badge
                         Rectangle {
                             id: sinkBadgeItem
-                            property int cycleIdx: root.sinkCycleIndex(modelData)
+                            property int cycleIdx: root.sinkCycleIndex(sink)
                             property int _force: root._badgeRefresh
                             visible: cycleIdx > 0
                             anchors.left: sinkIconItem.right
@@ -442,7 +453,7 @@ PluginComponent {
                             radius: width / 2
                             color: Theme.primary
                             border.width: 1
-                            border.color: root.isSinkActive(modelData) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
+                            border.color: root.isSinkActive(sink) ? Theme.primaryHoverLight : Theme.surfaceContainerHigh
 
                             StyledText {
                                 anchors.horizontalCenter: parent.horizontalCenter
@@ -464,10 +475,10 @@ PluginComponent {
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.leftMargin: Theme.iconSize + Theme.spacingM
                             anchors.rightMargin: 0
-                            text: root.sinkLabel(modelData)
+                            text: root.sinkLabel(sink)
                             color: Theme.surfaceText
                             font.pixelSize: Theme.fontSizeMedium
-                            font.weight: root.isSinkActive(modelData) ? Font.Medium : Font.Normal
+                            font.weight: root.isSinkActive(sink) ? Font.Medium : Font.Normal
                             elide: Text.ElideRight
                         }
 
@@ -476,7 +487,7 @@ PluginComponent {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                root.selectAudioOutput(modelData);
+                                root.selectAudioOutput(sink);
                                 popout.closePopout();
                             }
                         }
