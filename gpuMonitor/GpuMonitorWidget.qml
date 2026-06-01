@@ -478,3 +478,4 @@ PluginComponent {
         text: "100%"
     }
 }
+}
