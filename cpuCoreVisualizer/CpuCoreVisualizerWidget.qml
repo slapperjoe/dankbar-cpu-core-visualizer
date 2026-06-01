@@ -184,11 +184,17 @@ PluginComponent {
     }
 
     function reloadSettings() {
-        root.probeInterval = Math.max(250, Math.min(5000, Math.round(pluginData["probeInterval"] !== undefined ? pluginData["probeInterval"] : 1000)));
-        root.smoothingFactor = Math.max(0.08, Math.min(0.85, ((pluginData["smoothingPercent"] !== undefined ? pluginData["smoothingPercent"] : 28) / 100)));
-        root.colorMode = (pluginData["colorMode"] === "soft") ? "soft" : "vivid";
+        var p = function(key, def) {
+            var v = pluginData[key];
+            if (v !== undefined && v !== null) return v;
+            if (typeof root.loadValue === "function") return root.loadValue(key, def);
+            return def;
+        };
+        root.probeInterval = Math.max(250, Math.min(5000, Math.round(p("probeInterval", 1000))));
+        root.smoothingFactor = Math.max(0.08, Math.min(0.85, (p("smoothingPercent", 28) / 100)));
+        root.colorMode = (p("colorMode", "vivid") === "soft") ? "soft" : "vivid";
         root.fillOverlayOpacity = root.colorMode === "soft" ? 0.22 : 0.24;
-        root.showOverallPercentage = pluginData["showOverallPercentage"] !== false;
+        root.showOverallPercentage = p("showOverallPercentage", true) !== false;
         root._colorVersion += 1;
     }
 

@@ -9,15 +9,28 @@ PluginSettings {
 
     property int _v: 0
 
-    function setProbeInterval(ms) { pluginData["probeInterval"] = ms; _v += 1; }
-    function setSmoothing(pct) { pluginData["smoothingPercent"] = pct; _v += 1; }
-    function toggleColorMode() { pluginData["colorMode"] = pluginData["colorMode"] === "soft" ? "vivid" : "soft"; _v += 1; }
-    function toggleShowPct() { pluginData["showOverallPercentage"] = pluginData["showOverallPercentage"] === false ? true : false; _v += 1; }
+    function saveSetting(key, value) {
+        pluginData[key] = value;
+        root.saveValue(key, value);
+    }
+
+    function setProbeInterval(ms) { saveSetting("probeInterval", ms); _v += 1; }
+    function setSmoothing(pct) { saveSetting("smoothingPercent", pct); _v += 1; }
+    function toggleColorMode() {
+        var cur = pluginData["colorMode"] === "soft" ? "vivid" : "soft";
+        saveSetting("colorMode", cur);
+        _v += 1;
+    }
+    function toggleShowPct() {
+        var cur = pluginData["showOverallPercentage"] === false ? true : false;
+        saveSetting("showOverallPercentage", cur);
+        _v += 1;
+    }
     function isActive(key, value, fallbackValue) {
-        _v; // force QML binding re-evaluation on any setting change
-        var stored = pluginData[key];
-        if (stored === undefined) return value === fallbackValue;
-        return stored === value;
+        _v;
+        var stored = root.loadValue(key, null);
+        if (stored === null || stored === undefined) return value === fallbackValue;
+        return stored == value;
     }
 
     StyledText {
