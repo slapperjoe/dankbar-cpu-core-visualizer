@@ -1,136 +1,83 @@
 import QtQuick
-import QtQuick.Controls
 import qs.Common
 import qs.Modules.Plugins
-import qs.Services
 import qs.Widgets
 
 PluginSettings {
     id: root
     pluginId: "memoryMonitor"
 
-    Column {
-        anchors.fill: parent
-        anchors.margins: 12
-        spacing: 16
+    StyledText {
+        width: parent.width; text: "Memory Monitor Settings"
+        font.pixelSize: Theme.fontSizeLarge; font.weight: Font.Bold; color: Theme.surfaceText
+    }
+    StyledText {
+        width: parent.width; text: "Configure polling, appearance, and animation."
+        font.pixelSize: Theme.fontSizeSmall; color: Theme.surfaceVariantText; wrapMode: Text.WordWrap
+    }
 
-        // ── Header ──────────────────────────────────────────
-        StyledText {
-            width: parent.width
-            text: "Memory Monitor Settings"
-            font.pixelSize: Theme.fontSizeLarge
-            font.weight: Font.Bold
-            color: Theme.surfaceText
-        }
-
-        StyledText {
-            width: parent.width
-            text: "Configure polling, appearance, and animation for the memory usage monitor."
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
-            wrapMode: Text.WordWrap
-        }
-
-        // ── Probe Interval ──────────────────────────────────
-        StyledText {
-            text: "Probe Interval"
-            font.pixelSize: Theme.fontSizeMedium
-            font.weight: Font.Medium
-            color: Theme.surfaceText
-        }
-
-        StyledText {
-            text: "How often to request fresh memory stats (ms)"
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
-        }
-
-        Row {
-            spacing: 8
-
-            Slider {
-                id: probeSlider
-                from: 500
-                to: 10000
-                stepSize: 500
-                value: pluginData["probeInterval"] || 3000
-                onValueChanged: pluginData["probeInterval"] = value
-            }
-
-            StyledText {
-                text: Math.round(probeSlider.value) + " ms"
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.surfaceText
-                anchors.verticalCenter: parent.verticalCenter
-                width: 60
+    StyledText {
+        width: parent.width; text: "Probe Interval"
+        font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; color: Theme.surfaceText; topPadding: Theme.spacingM
+    }
+    Row {
+        width: parent.width; spacing: Theme.spacingS
+        Repeater {
+            model: [500, 1000, 2000, 3000, 5000, 10000]
+            delegate: Rectangle {
+                property int msValue: modelData
+                width: (parent.width - 5 * Theme.spacingS) / 6; height: 36; radius: Theme.cornerRadius
+                color: pluginData["probeInterval"] === msValue || (pluginData["probeInterval"] === undefined && msValue === 3000) ? Theme.primary : Theme.surfaceContainerHigh
+                border.width: 1; border.color: Theme.outline
+                StyledText {
+                    anchors.centerIn: parent; text: msValue >= 1000 ? (msValue/1000)+"s" : msValue+"ms"
+                    color: pluginData["probeInterval"] === msValue || (pluginData["probeInterval"] === undefined && msValue === 3000) ? Theme.surfaceContainerHigh : Theme.surfaceText
+                    font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
+                }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: pluginData["probeInterval"] = msValue }
             }
         }
+    }
 
-        // ── Color Mode ──────────────────────────────────────
-        StyledText {
-            text: "Color Mode"
-            font.pixelSize: Theme.fontSizeMedium
-            font.weight: Font.Medium
-            color: Theme.surfaceText
-        }
-
-        StyledText {
-            text: "Bar color palette: vivid (bright) or soft (muted)"
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
-        }
-
-        Row {
-            spacing: 8
-
-            Button {
-                text: "Vivid"
-                checked: (pluginData["colorMode"] || "vivid") === "vivid"
-                checkable: true
-                onClicked: pluginData["colorMode"] = "vivid"
-            }
-
-            Button {
-                text: "Soft"
-                checked: (pluginData["colorMode"] || "vivid") === "soft"
-                checkable: true
-                onClicked: pluginData["colorMode"] = "soft"
+    StyledText {
+        width: parent.width; text: "Smoothing"
+        font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; color: Theme.surfaceText; topPadding: Theme.spacingM
+    }
+    Row {
+        width: parent.width; spacing: Theme.spacingS
+        Repeater {
+            model: [5, 15, 30, 50, 70, 90]
+            delegate: Rectangle {
+                property int pctValue: modelData
+                width: (parent.width - 5 * Theme.spacingS) / 6; height: 36; radius: Theme.cornerRadius
+                color: pluginData["smoothingPercent"] === pctValue || (pluginData["smoothingPercent"] === undefined && pctValue === 15) ? Theme.primary : Theme.surfaceContainerHigh
+                border.width: 1; border.color: Theme.outline
+                StyledText {
+                    anchors.centerIn: parent; text: pctValue + "%"
+                    color: pluginData["smoothingPercent"] === pctValue || (pluginData["smoothingPercent"] === undefined && pctValue === 15) ? Theme.surfaceContainerHigh : Theme.surfaceText
+                    font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
+                }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: pluginData["smoothingPercent"] = pctValue }
             }
         }
+    }
 
-        // ── Smoothing ───────────────────────────────────────
+    StyledText {
+        width: parent.width; text: "Vivid Colours"
+        font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; color: Theme.surfaceText; topPadding: Theme.spacingM
+    }
+    Rectangle {
+        width: parent.width; height: 36; radius: Theme.cornerRadius
+        color: pluginData["colorMode"] !== "soft" ? Theme.primary : Theme.surfaceContainerHigh
+        border.width: 1; border.color: Theme.outline
         StyledText {
-            text: "Smoothing"
-            font.pixelSize: Theme.fontSizeMedium
-            font.weight: Font.Medium
-            color: Theme.surfaceText
+            anchors.centerIn: parent; text: pluginData["colorMode"] !== "soft" ? "Vivid (on)" : "Soft (off)"
+            color: pluginData["colorMode"] !== "soft" ? Theme.surfaceContainerHigh : Theme.surfaceText
+            font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
         }
-
-        StyledText {
-            text: "Animation smoothing factor (higher = smoother but slower)"
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
-        }
-
-        Row {
-            spacing: 8
-
-            Slider {
-                id: smoothingSlider
-                from: 1
-                to: 99
-                stepSize: 1
-                value: pluginData["smoothingPercent"] || 15
-                onValueChanged: pluginData["smoothingPercent"] = value
-            }
-
-            StyledText {
-                text: Math.round(smoothingSlider.value) + "%"
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.surfaceText
-                anchors.verticalCenter: parent.verticalCenter
-                width: 40
-            }
+        MouseArea {
+            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+            onClicked: pluginData["colorMode"] = pluginData["colorMode"] === "soft" ? "vivid" : "soft"
         }
     }
 }

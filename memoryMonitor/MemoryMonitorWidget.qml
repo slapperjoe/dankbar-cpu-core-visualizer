@@ -15,6 +15,7 @@ PluginComponent {
     // ── Runtime data ──────────────────────────────────────────
     readonly property real memoryUsageValue: Math.max(0, Math.min(100, Number(DgopService.memoryUsage || 0)))
     property real animatedMemoryUsage: 0
+    property real displayMemoryUsage: 0  // snapshot for stable display
 
     // ── Smoothing ─────────────────────────────────────────────
     readonly property real smoothingFactor: Math.pow(0.5, smoothingPercent / 100.0)
@@ -41,10 +42,14 @@ PluginComponent {
         root.colorMode = pluginData["colorMode"] || "vivid";
         root.smoothingPercent = Math.max(1, Math.min(99, Math.round(pluginData["smoothingPercent"] || 15)));
         DgopService.addRef(["memory", "processes"]);
+        root.displayMemoryUsage = root.memoryUsageValue;
         root.syncAnimatedMemoryUsage(true);
     }
 
     Component.onDestruction: {
+        probeTimer.stop();
+        animationTimer.stop();
+        settingsPoller.stop();
         DgopService.removeRef(["memory", "processes"]);
     }
 
@@ -54,7 +59,10 @@ PluginComponent {
         interval: root.probeIntervalMs
         running: true
         repeat: true
-        onTriggered: DgopService.updateAllStats()
+        onTriggered: {
+            DgopService.updateAllStats();
+            root.displayMemoryUsage = root.memoryUsageValue;
+        }
     }
 
     Timer {
@@ -63,6 +71,20 @@ PluginComponent {
         running: true
         repeat: true
         onTriggered: root.syncAnimatedMemoryUsage(false)
+    }
+
+    Timer {
+        id: settingsPoller
+        interval: 250
+        running: true
+        repeat: true
+        onTriggered: root.reloadSettings()
+    }
+
+    function reloadSettings() {
+        root.probeIntervalMs = Math.max(500, Math.min(10000, Math.round(pluginData["probeInterval"] !== undefined ? pluginData["probeInterval"] : 3000)));
+        root.colorMode = pluginData["colorMode"] || "vivid";
+        root.smoothingPercent = Math.max(1, Math.min(99, Math.round(pluginData["smoothingPercent"] !== undefined ? pluginData["smoothingPercent"] : 15)));
     }
 
     // ── Functions ─────────────────────────────────────────────
@@ -151,7 +173,7 @@ PluginComponent {
 
                 StyledText {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: root.animatedMemoryUsage.toFixed(0) + "%"
+                    text: root.displayMemoryUsage.toFixed(0) + "%"
                     color: Theme.widgetTextColor
                     font.pixelSize: Math.max(8, root.overallTextSize())
                     font.weight: Font.Medium
@@ -182,7 +204,7 @@ PluginComponent {
 
                 StyledText {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: root.animatedMemoryUsage.toFixed(0) + "%"
+                    text: root.displayMemoryUsage.toFixed(0) + "%"
                     color: Theme.widgetTextColor
                     font.pixelSize: Math.max(7, root.overallTextSize() - 1)
                     font.weight: Font.Medium
@@ -248,7 +270,7 @@ PluginComponent {
         PopoutComponent {
             id: popout
             headerText: "Memory Monitor"
-            detailsText: root.animatedMemoryUsage.toFixed(0) + "% used  |  " +
+            detailsText: root.displayMemoryUsage.toFixed(0) + "% used  |  " +
                 DgopService.formatSystemMemory(DgopService.usedMemoryKB) + " / " +
                 DgopService.formatSystemMemory(DgopService.totalMemoryKB)
             showCloseButton: false
@@ -300,7 +322,7 @@ PluginComponent {
 
                             StyledText {
                                 id: usagePctLabel
-                                text: root.animatedMemoryUsage.toFixed(0) + "%"
+                                text: root.displayMemoryUsage.toFixed(0) + "%"
                                 color: Theme.surfaceText
                                 font.pixelSize: Theme.fontSizeMedium
                                 font.weight: Font.Bold

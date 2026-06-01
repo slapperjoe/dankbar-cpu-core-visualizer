@@ -162,7 +162,6 @@ PluginComponent {
             root.targetCoreUsage = root.rawCoreUsage.slice();
             root.displayCpuUsage = root.clampUsage(Number(DgopService.cpuUsage || 0));
             root.syncAnimatedUsage(false);
-            console.log("cpu: probe tick, total=" + root.displayCpuUsage.toFixed(0) + "%, cores=" + root.targetCoreUsage.length);
         }
     }
 
@@ -185,15 +184,11 @@ PluginComponent {
     }
 
     function reloadSettings() {
-        var prev = root.probeInterval;
         root.probeInterval = Math.max(250, Math.min(5000, Math.round(pluginData["probeInterval"] !== undefined ? pluginData["probeInterval"] : 1000)));
         root.smoothingFactor = Math.max(0.08, Math.min(0.85, ((pluginData["smoothingPercent"] !== undefined ? pluginData["smoothingPercent"] : 28) / 100)));
-        var prevMode = root.colorMode;
         root.colorMode = (pluginData["colorMode"] === "soft") ? "soft" : "vivid";
         root.fillOverlayOpacity = root.colorMode === "soft" ? 0.22 : 0.24;
         root.showOverallPercentage = pluginData["showOverallPercentage"] !== false;
-        if (prev !== root.probeInterval || prevMode !== root.colorMode)
-            console.log("cpu: reloadSettings probe=" + root.probeInterval + "ms color=" + root.colorMode + " showPct=" + root.showOverallPercentage + " raw=" + JSON.stringify([pluginData["probeInterval"], pluginData["colorMode"], pluginData["showOverallPercentage"]]));
         root._colorVersion += 1;
     }
 

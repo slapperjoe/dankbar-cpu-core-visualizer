@@ -1,8 +1,6 @@
 import QtQuick
-import QtQuick.Controls
 import qs.Common
 import qs.Modules.Plugins
-import qs.Services
 import qs.Widgets
 
 PluginSettings {
@@ -12,125 +10,101 @@ PluginSettings {
     StyledText {
         width: parent.width
         text: "CPU Core Visualizer"
-        font.pixelSize: Theme.fontSizeLarge
-        font.weight: Font.Bold
-        color: Theme.surfaceText
+        font.pixelSize: Theme.fontSizeLarge; font.weight: Font.Bold; color: Theme.surfaceText
     }
-
     StyledText {
         width: parent.width
         text: "Per-core CPU usage bars for DankBar."
-        font.pixelSize: Theme.fontSizeSmall
-        color: Theme.surfaceVariantText
-        wrapMode: Text.WordWrap
+        font.pixelSize: Theme.fontSizeSmall; color: Theme.surfaceVariantText; wrapMode: Text.WordWrap
     }
 
     // ── Probe interval ────────────────────────────────────────────────
     StyledText {
-        width: parent.width
-        text: "Probe Interval"
-        font.pixelSize: Theme.fontSizeMedium
-        font.weight: Font.Medium
-        color: Theme.surfaceText
-        topPadding: Theme.spacingM
+        width: parent.width; text: "Probe Interval"
+        font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; color: Theme.surfaceText; topPadding: Theme.spacingM
     }
-
     Row {
-        width: parent.width
-        spacing: Theme.spacingM
-
-        Slider {
-            id: probeSlider
-            width: parent.width - 80
-            from: 250
-            to: 5000
-            stepSize: 250
-            value: Number(pluginData["probeInterval"] !== undefined ? pluginData["probeInterval"] : 1000)
-            anchors.verticalCenter: parent.verticalCenter
-            onValueChanged: {
-                pluginData["probeInterval"] = Math.round(value);
-                console.log("cpu-settings: wrote probeInterval=" + Math.round(value));
+        width: parent.width; spacing: Theme.spacingS
+        Repeater {
+            model: [250, 500, 1000, 2000, 3000, 5000]
+            delegate: Rectangle {
+                property int msValue: modelData
+                width: (parent.width - 5 * Theme.spacingS) / 6; height: 36; radius: Theme.cornerRadius
+                color: pluginData["probeInterval"] === msValue || (pluginData["probeInterval"] === undefined && msValue === 1000) ? Theme.primary : Theme.surfaceContainerHigh
+                border.width: 1; border.color: Theme.outline
+                StyledText {
+                    anchors.centerIn: parent; text: msValue >= 1000 ? (msValue / 1000) + "s" : msValue + "ms"
+                    color: pluginData["probeInterval"] === msValue || (pluginData["probeInterval"] === undefined && msValue === 1000) ? Theme.surfaceContainerHigh : Theme.surfaceText
+                    font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
+                }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: pluginData["probeInterval"] = msValue }
             }
-        }
-
-        StyledText {
-            text: Math.round(probeSlider.value) + " ms"
-            width: 70
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
-            anchors.verticalCenter: parent.verticalCenter
-            horizontalAlignment: Text.AlignRight
         }
     }
 
     // ── Smoothing ─────────────────────────────────────────────────────
     StyledText {
-        width: parent.width
-        text: "Animation Smoothing"
-        font.pixelSize: Theme.fontSizeMedium
-        font.weight: Font.Medium
-        color: Theme.surfaceText
-        topPadding: Theme.spacingM
+        width: parent.width; text: "Animation Smoothing"
+        font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; color: Theme.surfaceText; topPadding: Theme.spacingM
     }
-
     Row {
-        width: parent.width
-        spacing: Theme.spacingM
-
-        Slider {
-            id: smoothingSlider
-            width: parent.width - 80
-            from: 8
-            to: 85
-            stepSize: 1
-            value: Number(pluginData["smoothingPercent"] !== undefined ? pluginData["smoothingPercent"] : 28)
-            anchors.verticalCenter: parent.verticalCenter
-            onValueChanged: {
-                pluginData["smoothingPercent"] = Math.round(value);
-                console.log("cpu-settings: wrote smoothingPercent=" + Math.round(value));
+        width: parent.width; spacing: Theme.spacingS
+        Repeater {
+            model: [8, 15, 28, 50, 70, 85]
+            delegate: Rectangle {
+                property int pctValue: modelData
+                width: (parent.width - 5 * Theme.spacingS) / 6; height: 36; radius: Theme.cornerRadius
+                color: pluginData["smoothingPercent"] === pctValue || (pluginData["smoothingPercent"] === undefined && pctValue === 28) ? Theme.primary : Theme.surfaceContainerHigh
+                border.width: 1; border.color: Theme.outline
+                StyledText {
+                    anchors.centerIn: parent; text: pctValue + "%"
+                    color: pluginData["smoothingPercent"] === pctValue || (pluginData["smoothingPercent"] === undefined && pctValue === 28) ? Theme.surfaceContainerHigh : Theme.surfaceText
+                    font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
+                }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: pluginData["smoothingPercent"] = pctValue }
             }
         }
+    }
 
+    // ── Color mode ────────────────────────────────────────────────────
+    StyledText {
+        width: parent.width; text: "Vivid Colours"
+        font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; color: Theme.surfaceText; topPadding: Theme.spacingM
+    }
+    Rectangle {
+        width: parent.width; height: 36; radius: Theme.cornerRadius
+        color: pluginData["colorMode"] !== "soft" ? Theme.primary : Theme.surfaceContainerHigh
+        border.width: 1; border.color: Theme.outline
         StyledText {
-            text: Math.round(smoothingSlider.value) + "%"
-            width: 70
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
-            anchors.verticalCenter: parent.verticalCenter
-            horizontalAlignment: Text.AlignRight
+            anchors.centerIn: parent
+            text: pluginData["colorMode"] !== "soft" ? "Vivid (on)" : "Soft (off)"
+            color: pluginData["colorMode"] !== "soft" ? Theme.surfaceContainerHigh : Theme.surfaceText
+            font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
+        }
+        MouseArea {
+            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+            onClicked: pluginData["colorMode"] = pluginData["colorMode"] === "soft" ? "vivid" : "soft"
         }
     }
 
-    // ── Color mode toggle ─────────────────────────────────────────────
+    // ── Show overall percentage ───────────────────────────────────────
     StyledText {
-        width: parent.width
-        text: "Vivid Colours"
-        font.pixelSize: Theme.fontSizeMedium
-        font.weight: Font.Medium
-        color: Theme.surfaceText
-        topPadding: Theme.spacingM
+        width: parent.width; text: "Show Overall Percentage"
+        font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; color: Theme.surfaceText; topPadding: Theme.spacingM
     }
-
-    Switch {
-        checked: pluginData["colorMode"] !== "soft"
-        onToggled: {
-            pluginData["colorMode"] = checked ? "vivid" : "soft";
-            console.log("cpu-settings: wrote colorMode=" + pluginData["colorMode"]);
+    Rectangle {
+        width: parent.width; height: 36; radius: Theme.cornerRadius
+        color: pluginData["showOverallPercentage"] !== false ? Theme.primary : Theme.surfaceContainerHigh
+        border.width: 1; border.color: Theme.outline
+        StyledText {
+            anchors.centerIn: parent
+            text: pluginData["showOverallPercentage"] !== false ? "Visible" : "Hidden"
+            color: pluginData["showOverallPercentage"] !== false ? Theme.surfaceContainerHigh : Theme.surfaceText
+            font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
         }
-    }
-
-    // ── Show overall percentage toggle ─────────────────────────────────
-    StyledText {
-        width: parent.width
-        text: "Show Overall Percentage"
-        font.pixelSize: Theme.fontSizeMedium
-        font.weight: Font.Medium
-        color: Theme.surfaceText
-        topPadding: Theme.spacingM
-    }
-
-    Switch {
-        checked: pluginData["showOverallPercentage"] !== false
-        onToggled: pluginData["showOverallPercentage"] = checked
+        MouseArea {
+            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+            onClicked: pluginData["showOverallPercentage"] = pluginData["showOverallPercentage"] === false ? true : false
+        }
     }
 }
