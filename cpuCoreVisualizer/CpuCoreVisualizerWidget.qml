@@ -3,7 +3,6 @@ import qs.Common
 import qs.Modules.Plugins
 import qs.Services
 import qs.Widgets
-import io.github.dankmachines.dankmaterialshell.theming 1.0 as Theme
 
 PluginComponent {
     id: root
