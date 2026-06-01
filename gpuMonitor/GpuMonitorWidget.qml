@@ -40,7 +40,30 @@ PluginComponent {
     }
     function gpuUsage(index) {
         if (index < 0 || index >= root.gpuList.length) return 0;
-        return Math.max(0, Math.min(100, Number(root.gpuList[index].utilization || 0)));
+        const g = root.gpuList[index];
+        const util = Number(g.utilization || 0);
+        if (util > 0) return Math.max(0, Math.min(100, util));
+        const temp = Number(g.temperature || 0);
+        if (temp > 0) return Math.max(0, Math.min(100, temp));
+        return 0;
+    }
+    function gpuMetricLabel(index) {
+        if (index < 0 || index >= root.gpuList.length) return "—";
+        const g = root.gpuList[index];
+        const util = Number(g.utilization || 0);
+        if (util > 0) return "Util";
+        const temp = Number(g.temperature || 0);
+        if (temp > 0) return "Temp";
+        return "—";
+    }
+    function gpuMetricText(index) {
+        if (index < 0 || index >= root.gpuList.length) return "—";
+        const g = root.gpuList[index];
+        const util = Number(g.utilization || 0);
+        if (util > 0) return root.gpuUsage(index).toFixed(0) + "%";
+        const temp = Number(g.temperature || 0);
+        if (temp > 0) return Math.round(temp) + "°C";
+        return "—";
     }
     function gpuName(index) {
         if (index < 0 || index >= root.gpuList.length) return "GPU";
@@ -100,7 +123,13 @@ PluginComponent {
         repeat: true
         onTriggered: {
             DgopService.updateAllStats();
-            root.targetGpuUsages = root.gpuList.map(function(g) { return Math.max(0, Math.min(100, Number(g.utilization || 0))); });
+            root.targetGpuUsages = root.gpuList.map(function(g) {
+                var util = Number(g.utilization || 0);
+                if (util > 0) return Math.max(0, Math.min(100, util));
+                var temp = Number(g.temperature || 0);
+                if (temp > 0) return Math.max(0, Math.min(100, temp));
+                return 0;
+            });
             root.syncAnimatedGpuUsage(false);
         }
     }
@@ -137,7 +166,7 @@ PluginComponent {
     // ── Horizontal bar pill ──────────────────────────────────────
     horizontalBarPill: Component {
         MouseArea {
-            implicitWidth: hContentRow.implicitWidth + 24
+            implicitWidth: Math.max(hContentRow.implicitWidth, Math.ceil(gpuPctMetrics.advanceWidth) + 28) + 24
             implicitHeight: root.barThickness
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
@@ -175,12 +204,13 @@ PluginComponent {
                     anchors.verticalCenter: parent.verticalCenter
                     StyledText {
                         id: hGpuLabel; anchors.centerIn: parent
-                        text: root.gpuUsage(0).toFixed(0) + "%"
+                        text: root.gpuMetricText(0)
                         color: "#FFFFFF"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Bold
                     }
                 }
                 StyledText {
                     visible: root.gpuCount === 0; text: "—"
+                    width: Math.ceil(gpuPctMetrics.advanceWidth) + 28
                     color: Theme.widgetTextColor
                     font.pixelSize: Math.max(8, root.overallTextSize()); font.weight: Font.Medium
                     anchors.verticalCenter: parent.verticalCenter
@@ -224,12 +254,13 @@ PluginComponent {
                 }
                 StyledText {
                     visible: root.gpuCount > 0
-                    text: root.gpuUsage(0).toFixed(0) + "%"
+                    text: root.gpuMetricText(0)
                     color: "#FFFFFF"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Bold
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 StyledText {
                     visible: root.gpuCount === 0; text: "—"
+                    width: Math.ceil(gpuPctMetrics.advanceWidth) + 28
                     color: Theme.widgetTextColor
                     font.pixelSize: Math.max(7, root.overallTextSize() - 1); font.weight: Font.Medium
                     anchors.verticalCenter: parent.verticalCenter
@@ -298,7 +329,7 @@ PluginComponent {
                                 width: parent.width - 80 - 80 - 3 * Theme.spacingM
                             }
                             StyledText {
-                                text: usage.toFixed(0) + "%"; color: Theme.surfaceText
+                                text: root.gpuMetricText(index); color: Theme.surfaceText
                                 font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Bold
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: 40; horizontalAlignment: Text.AlignRight
