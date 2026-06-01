@@ -84,9 +84,9 @@ PluginSettings {
 
                 delegate: Rectangle {
                     width: pillRow.implicitWidth + 32
-                    height: 28
-                    radius: 14
-                    color: Theme.surfaceVariant
+                    height: 30
+                    radius: 15
+                    color: Theme.surfaceContainerHigh
                     border.width: 1
                     border.color: Theme.outline
 
@@ -94,40 +94,38 @@ PluginSettings {
                         id: pillRow
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.left: parent.left
-                        anchors.leftMargin: 12
-                        spacing: 6
+                        anchors.leftMargin: 14
+                        spacing: 4
 
                         StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
                             text: typeof modelData === "string" && modelData.length > 0 && modelData !== "undefined" && modelData !== "null" ? modelData : "unknown"
-                            color: Theme.onSurfaceVariant
+                            color: Theme.surfaceText
                             font.pixelSize: Theme.fontSizeSmall
                             font.weight: Font.Medium
                         }
 
                         // Remove button
-                        Rectangle {
-                            width: 24
-                            height: 24
-                            radius: 12
-                            color: pillRemoveArea.containsMouse ? Theme.errorContainer : "transparent"
-
-                            DankIcon {
-                                anchors.centerIn: parent
-                                name: "close"
-                                size: 14
-                                color: Theme.onErrorContainer
+                        MouseArea {
+                            id: pillRemoveArea
+                            width: 20; height: 20
+                            anchors.verticalCenter: parent.verticalCenter
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var copy = root.selectedMountPaths.filter(function(p) { return p !== modelData; });
+                                root.selectedMountPaths = copy;
+                                root.saveValue("selectedDiskMountPaths", JSON.stringify(copy));
                             }
-
-                            MouseArea {
-                                id: pillRemoveArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    var copy = root.selectedMountPaths.filter(function(p) { return p !== modelData; });
-                                    root.selectedMountPaths = copy;
-                                    root.saveValue("selectedDiskMountPaths", JSON.stringify(copy));
-                                }
+                            Rectangle {
+                                anchors.fill: parent; radius: 10
+                                color: pillRemoveArea.containsMouse ? Theme.primary : "transparent"
+                                border.width: 1; border.color: pillRemoveArea.containsMouse ? Theme.primary : Theme.outline
+                            }
+                            StyledText {
+                                anchors.centerIn: parent
+                                text: "✕"; color: pillRemoveArea.containsMouse ? Theme.surfaceContainerHigh : Theme.surfaceVariantText
+                                font.pixelSize: 10; font.weight: Font.Bold
                             }
                         }
                     }

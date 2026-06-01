@@ -20,7 +20,6 @@ PluginComponent {
     property int smoothingPercent: 15
     property int probeInterval: 3000
     property var selectedDiskMountPaths: []
-    property int _colorVersion: 0
 
     readonly property real smoothingFactor: Math.pow(0.5, smoothingPercent / 100.0)
     readonly property real animationDuration: 120
@@ -166,7 +165,6 @@ PluginComponent {
         root.probeInterval = Math.max(500, Math.min(30000, Number(pluginData["probeInterval"]) || 3000));
         root.probeIntervalMs = root.probeInterval;
         root.popoutTriggerMode = pluginData["popoutTriggerMode"] || "click";
-        root._colorVersion += 1;
         var storedStr = pluginData["selectedDiskMountPaths"];
         var storedPaths;
         if (storedStr && typeof storedStr === "string") {
@@ -202,12 +200,6 @@ PluginComponent {
         if (mount.mount !== undefined && mount.mount !== null && String(mount.mount).length > 0)
             return String(mount.mount);
         return String(mount.device || "");
-    }
-
-    function overallTextSize() {
-        const fs = root.barConfig ? root.barConfig.fontScale : undefined;
-        const mx = root.barConfig ? root.barConfig.maximizeWidgetText : undefined;
-        return Theme.barTextSize(root.barThickness, fs, mx);
     }
 
     function diskMountPercent(mount) {
@@ -316,63 +308,64 @@ PluginComponent {
         return Math.round(root.diskUsageValue);
     }
 
-    // ── TextMetrics for stable pill width ──────────────────────
-    TextMetrics {
-        id: diskPctMetrics
-        font.pixelSize: Theme.fontSizeSmall
-        font.weight: Font.Bold
-        text: "100%"
-    }
-
     horizontalBarPill: Component {
         MouseArea {
-            implicitWidth: hContentRow.implicitWidth + 24
-            implicitHeight: root.barThickness
+            id: hMouseArea
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) root.pillRightClickAction();
-                else root.openPopout();
+            // Size to fit content + padding
+            implicitWidth: hContentRow.implicitWidth + 24
+            implicitHeight: root.barThickness
+
+            onEntered: {
+                if (root.popoutTriggerMode === "hover")
+                    root.openPopout();
             }
+
+            onClicked: function(mouse) {
+                if (mouse.button === Qt.RightButton) {
+                    root.pillRightClickAction();
+                } else if (root.popoutTriggerMode === "click") {
+                    root.openPopout();
+                }
+            }
+
             Row {
                 id: hContentRow
                 anchors.centerIn: parent
-                spacing: 4
-                Repeater {
-                    model: root.selectedDiskMounts
-                    delegate: Rectangle {
-                        property int _vc: root._colorVersion
-                        width: 24; height: root.barThickness - 10
-                        radius: 3
-                        color: { _vc; root.colorFor(index); }
-                        opacity: 0.85
-                        anchors.verticalCenter: parent.verticalCenter
-                        Rectangle {
-                            anchors.left: parent.left; anchors.bottom: parent.bottom
-                            width: parent.width
-                            height: Math.max(2, (root.animatedDiskUsages[index] || 0) / 100 * parent.height)
-                            radius: parent.radius; color: parent.color
-                        }
-                    }
-                }
-                Item {
-                    visible: root.selectedDiskMounts.length > 0
-                    width: Math.ceil(diskPctMetrics.advanceWidth) + 4
-                    height: hDiskLabel.implicitHeight
+                spacing: -6
+
+                DankIcon {
+                    name: "storage"
+                    size: Theme.iconSize - 6
+                    color: "#FFFFFF"
+                    filled: true
                     anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Rectangle {
+                    property int _force: root._badgeRefresh
+                    visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
+                    width: 14
+                    height: width
+                    radius: width / 2
+                    color: Theme.primary
+                    border.width: 1
+                    border.color: Theme.surfaceContainerHigh
+
                     StyledText {
-                        id: hDiskLabel; anchors.centerIn: parent
-                        text: root.selectedDiskMounts.length > 0 ? (root.animatedDiskUsages[0] || 0).toFixed(0) + "%" : ""
-                        color: "#FFFFFF"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Bold
+                        property int _force: parent._force
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.horizontalCenterOffset: -1
+                        anchors.verticalCenterOffset: 1
+                        text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
+                        color: Theme.surfaceContainerHigh
+                        font.pixelSize: 10
+                        font.weight: Font.Bold
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
-                }
-                StyledText {
-                    visible: root.selectedDiskMounts.length === 0; text: "—"
-                    color: Theme.widgetTextColor
-                    font.pixelSize: Math.max(8, root.overallTextSize()); font.weight: Font.Medium
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Math.ceil(diskPctMetrics.advanceWidth) + 4
                 }
             }
         }
@@ -380,46 +373,61 @@ PluginComponent {
 
     verticalBarPill: Component {
         MouseArea {
-            implicitWidth: vContentRow.implicitWidth + 16
+            id: vMouseArea
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            implicitWidth: vContentRow.implicitWidth + 24
             implicitHeight: root.barThickness
-            hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) root.pillRightClickAction();
-                else root.openPopout();
+
+            onEntered: {
+                if (root.popoutTriggerMode === "hover")
+                    root.openPopout();
             }
+
+            onClicked: function(mouse) {
+                if (mouse.button === Qt.RightButton) {
+                    root.pillRightClickAction();
+                } else if (root.popoutTriggerMode === "click") {
+                    root.openPopout();
+                }
+            }
+
             Row {
                 id: vContentRow
                 anchors.centerIn: parent
-                spacing: 4
-                Repeater {
-                    model: root.selectedDiskMounts
-                    delegate: Rectangle {
-                        property int _vc: root._colorVersion
-                        width: 24; height: root.barThickness - 10
-                        radius: 3
-                        color: { _vc; root.colorFor(index); }
-                        opacity: 0.85
+                spacing: -6
+
+                DankIcon {
+                    name: "storage"
+                    size: Theme.iconSize - 6
+                    color: "#FFFFFF"
+                    filled: true
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Rectangle {
+                    property int _force: root._badgeRefresh
+                    visible: _force ? (root.updateBarBadge() > 0) : (root.updateBarBadge() > 0)
+                    width: 14
+                    height: width
+                    radius: width / 2
+                    color: Theme.primary
+                    border.width: 1
+                    border.color: Theme.surfaceContainerHigh
+
+                    StyledText {
+                        property int _force: parent._force
+                        anchors.horizontalCenter: parent.horizontalCenter
                         anchors.verticalCenter: parent.verticalCenter
-                        Rectangle {
-                            anchors.left: parent.left; anchors.bottom: parent.bottom
-                            width: parent.width
-                            height: Math.max(2, (root.animatedDiskUsages[index] || 0) / 100 * parent.height)
-                            radius: parent.radius; color: parent.color
-                        }
+                        anchors.horizontalCenterOffset: -1
+                        anchors.verticalCenterOffset: 1
+                        text: String(_force ? root.updateBarBadge() : root.updateBarBadge())
+                        color: Theme.surfaceContainerHigh
+                        font.pixelSize: 10
+                        font.weight: Font.Bold
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
-                }
-                StyledText {
-                    visible: root.selectedDiskMounts.length > 0
-                    text: (root.animatedDiskUsages[0] || 0).toFixed(0) + "%"
-                    color: "#FFFFFF"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Bold
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                StyledText {
-                    visible: root.selectedDiskMounts.length === 0; text: "—"
-                    color: Theme.widgetTextColor
-                    font.pixelSize: Math.max(7, root.overallTextSize() - 1); font.weight: Font.Medium
-                    anchors.verticalCenter: parent.verticalCenter
                 }
             }
         }
