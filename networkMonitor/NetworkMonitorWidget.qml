@@ -221,26 +221,40 @@ PluginComponent {
                 anchors.centerIn: parent
                 spacing: 3
 
-                // Download label (fixed width, right-aligned)
-                Item {
-                    width: Math.ceil(speedMetrics.advanceWidth) + 8
-                    height: hDlLabel.implicitHeight
+                // Download/Upload stacked on left (fixed width, right-aligned)
+                Column {
+                    spacing: 0
                     anchors.verticalCenter: parent.verticalCenter
-                    StyledText {
-                        id: hDlLabel
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "↓ " + root.formatCompactSpeed(root.currentDownloadRate)
-                        color: root.downloadColor
-                        font.pixelSize: Math.max(8, root.overallTextSize())
-                        font.weight: Font.Medium
+                    Item {
+                        width: Math.ceil(speedMetrics.advanceWidth) + 8
+                        height: hDlLabel.implicitHeight
+                        StyledText {
+                            id: hDlLabel
+                            anchors.right: parent.right
+                            text: "↓ " + root.formatCompactSpeed(root.currentDownloadRate)
+                            color: root.downloadColor
+                            font.pixelSize: Math.max(8, root.overallTextSize())
+                            font.weight: Font.Medium
+                        }
+                    }
+                    Item {
+                        width: Math.ceil(speedMetrics.advanceWidth) + 8
+                        height: hUlLabel.implicitHeight
+                        StyledText {
+                            id: hUlLabel
+                            anchors.right: parent.right
+                            text: "↑ " + root.formatCompactSpeed(root.currentUploadRate)
+                            color: root.uploadColor
+                            font.pixelSize: Math.max(8, root.overallTextSize())
+                            font.weight: Font.Medium
+                        }
                     }
                 }
 
                 // Mini chart (fixed width)
                 Rectangle {
                     width: root.chartWidth
-                    height: Math.max(12, root.barThickness - 8)
+                    height: Math.max(16, root.barThickness - 6)
                     anchors.verticalCenter: parent.verticalCenter
                     radius: Math.min(4, height / 2)
                     color: Theme.surfaceContainer
@@ -257,22 +271,6 @@ PluginComponent {
                         uploadColor: root.uploadColor
                         strokeWidth: Math.max(1, root.lineWidth - 0.5)
                         gridVisible: false
-                    }
-                }
-
-                // Upload label (fixed width)
-                Item {
-                    width: Math.ceil(speedMetrics.advanceWidth) + 8
-                    height: hUlLabel.implicitHeight
-                    anchors.verticalCenter: parent.verticalCenter
-                    StyledText {
-                        id: hUlLabel
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "↑ " + root.formatCompactSpeed(root.currentUploadRate)
-                        color: root.uploadColor
-                        font.pixelSize: Math.max(8, root.overallTextSize())
-                        font.weight: Font.Medium
                     }
                 }
             }
