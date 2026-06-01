@@ -143,14 +143,14 @@ PluginComponent {
     Component.onCompleted: {
         root.isDesktopWidget = (root.barConfig === undefined || root.barConfig === null);
         root._applyPluginData();
-        DgopService.addRef(["cpu", "memory", "disk", "processes", "network", "gpu"]);
+        DgopService.addRef(["diskmounts", "disk"]);
         DgopService.updateAllStats();
         root.syncAnimatedDiskUsage(true);
         root._badgeRefresh += 1;
     }
 
     Component.onDestruction: {
-        DgopService.removeRef(["cpu", "memory", "disk", "processes", "network", "gpu"]);
+        DgopService.removeRef(["diskmounts", "disk"]);
     }
 
     // Re-apply settings when pluginData changes (e.g., user changes settings)
