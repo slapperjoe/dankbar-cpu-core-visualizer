@@ -109,7 +109,7 @@ PluginComponent {
     }
 
     // ── nvidia-smi processes ─────────────────────────────────
-    Io {
+    Process {
         id: nvidiaGpuStatsProcess
         command: "nvidia-smi"
         arguments: ["--query-gpu=index,uuid,name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,power.limit,clock.grafix,clock.mem,utilization.enc,utilization.dec", "--format=csv"]
@@ -121,7 +121,7 @@ PluginComponent {
         }
     }
 
-    Io {
+    Process {
         id: nvidiaGpuAppsProcess
         command: "nvidia-smi"
         arguments: ["--query-compute-apps=gpu,pid,processName,usedMemory", "--format=csv"]
