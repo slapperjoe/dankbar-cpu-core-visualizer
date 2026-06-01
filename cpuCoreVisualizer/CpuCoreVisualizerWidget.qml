@@ -167,6 +167,14 @@ PluginComponent {
         }
     }
 
+    // ── TextMetrics for stable pill width ──────────────────────────────
+    TextMetrics {
+        id: cpuPercentMetrics
+        font.pixelSize: Theme.fontSizeSmall
+        font.weight: Font.Bold
+        text: "100%"  // worst-case width
+    }
+
     // ── Horizontal bar pill ───────────────────────────────────────────
     horizontalBarPill: Component {
         MouseArea {
@@ -211,14 +219,20 @@ PluginComponent {
                     }
                 }
 
-                StyledText {
+                Item {
                     visible: root.showOverallPercentage
-                    text: root.totalCpuUsage.toFixed(0) + "%"
-                    color: "#FFFFFF"
-                    font.pixelSize: Theme.fontSizeSmall
-                    font.weight: Font.Bold
+                    width: Math.ceil(cpuPercentMetrics.advanceWidth) + 4
+                    height: hPercentLabel.implicitHeight
                     anchors.verticalCenter: parent.verticalCenter
-                    leftPadding: root.barGap + 4
+
+                    StyledText {
+                        id: hPercentLabel
+                        anchors.centerIn: parent
+                        text: root.totalCpuUsage.toFixed(0) + "%"
+                        color: "#FFFFFF"
+                        font.pixelSize: Theme.fontSizeSmall
+                        font.weight: Font.Bold
+                    }
                 }
             }
         }
@@ -268,14 +282,20 @@ PluginComponent {
                     }
                 }
 
-                StyledText {
+                Item {
                     visible: root.showOverallPercentage
-                    text: root.totalCpuUsage.toFixed(0) + "%"
-                    color: "#FFFFFF"
-                    font.pixelSize: Theme.fontSizeSmall
-                    font.weight: Font.Bold
+                    width: Math.ceil(cpuPercentMetrics.advanceWidth) + 4
+                    height: vPercentLabel.implicitHeight
                     anchors.verticalCenter: parent.verticalCenter
-                    leftPadding: root.barGap + 4
+
+                    StyledText {
+                        id: vPercentLabel
+                        anchors.centerIn: parent
+                        text: root.totalCpuUsage.toFixed(0) + "%"
+                        color: "#FFFFFF"
+                        font.pixelSize: Theme.fontSizeSmall
+                        font.weight: Font.Bold
+                    }
                 }
             }
         }
@@ -312,6 +332,9 @@ PluginComponent {
     }
 
     // ── Popout ────────────────────────────────────────────────────────
+    readonly property int popoutMaxRows: 5
+    readonly property int popoutColumns: Math.max(1, Math.ceil(root.displayedCoreCount / root.popoutMaxRows))
+
     popoutContent: Component {
         PopoutComponent {
             id: popout
@@ -319,7 +342,7 @@ PluginComponent {
             detailsText: "Overall: " + root.totalCpuUsage.toFixed(0) + "%  |  " + root.displayedCoreCount + " cores"
             showCloseButton: false
 
-            Column {
+            Flow {
                 width: parent.width
                 anchors.margins: 8
                 anchors.left: parent.left
@@ -335,52 +358,46 @@ PluginComponent {
                         property string coreColor: root.colorFor(index)
                         property string coreLabel: root.usageLabel(index)
                         property bool isHottest: index === root.hottestCoreIndex()
+                        property real cellWidth: Math.max(100, (parent.width - Theme.spacingS * (root.popoutColumns - 1)) / root.popoutColumns)
 
-                        width: parent.width
-                        height: 40
+                        width: cellWidth
+                        height: 44
                         radius: Theme.cornerRadius
                         color: Theme.surfaceContainerHigh
 
+                        // Background fill bar
                         Rectangle {
                             anchors.left: parent.left
-                            anchors.top: parent.top
                             anchors.bottom: parent.bottom
                             width: Math.max(4, (coreUsage / 100) * parent.width)
+                            height: parent.height
                             radius: parent.radius
                             color: coreColor
                             opacity: root.fillOverlayOpacity
                         }
 
+                        // Active indicator bar at bottom
                         Rectangle {
                             anchors.left: parent.left
-                            anchors.top: parent.top
                             anchors.bottom: parent.bottom
-                            width: Math.max(4, (coreUsage / 100) * parent.width)
-                            radius: parent.radius
+                            anchors.right: parent.right
+                            height: 2
+                            radius: 1
                             color: coreColor
-                            opacity: 0.85
                         }
 
                         Row {
                             anchors.fill: parent
                             anchors.margins: Theme.spacingS
-                            spacing: Theme.spacingM
-
-                            Rectangle {
-                                width: 8
-                                height: 8
-                                radius: 4
-                                color: coreColor
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
+                            spacing: Theme.spacingS
 
                             StyledText {
-                                text: "Core " + coreIndex
+                                text: "C" + coreIndex
                                 color: Theme.surfaceText
                                 font.pixelSize: Theme.fontSizeSmall
                                 font.weight: isHottest ? Font.Bold : Font.Normal
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: 60
+                                width: 28
                             }
 
                             StyledText {
@@ -389,16 +406,17 @@ PluginComponent {
                                 font.pixelSize: Theme.fontSizeSmall
                                 font.weight: Font.Bold
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: 40
+                                width: 32
                                 horizontalAlignment: Text.AlignRight
                             }
 
                             StyledText {
-                                text: coreLabel + (isHottest ? "  |  hottest" : "")
-                                color: Theme.surfaceVariantText
+                                text: coreLabel + (isHottest ? "" : "")
+                                color: isHottest ? coreColor : Theme.surfaceVariantText
                                 font.pixelSize: Theme.fontSizeSmall - 1
                                 anchors.verticalCenter: parent.verticalCenter
                                 elide: Text.ElideRight
+                                width: cellWidth - 28 - 32 - 3 * Theme.spacingS
                             }
                         }
                     }
@@ -407,6 +425,6 @@ PluginComponent {
         }
     }
 
-    popoutWidth: 380
+    popoutWidth: 480
     popoutHeight: 0
 }
