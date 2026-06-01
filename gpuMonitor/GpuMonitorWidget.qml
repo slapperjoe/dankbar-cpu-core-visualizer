@@ -9,7 +9,6 @@ PluginComponent {
     id: root
 
     // ── Properties ─────────────────────────────────────────────
-    property var pluginData: Plugins.PluginStorage
     property bool isDesktopWidget: false
     property var displayGpuTelemetry: []
     property var gpuProcesses: []
@@ -20,7 +19,6 @@ PluginComponent {
     property bool nvidiaSmiAvailable: false
     property bool nvidiaSmiPollingEnabled: false
     property bool useGenericGpuFallback: false
-    property bool isDesktopWidget: false
 
     property var primaryGpu: gpuTelemetry.length > 0 ? gpuTelemetry[0] : null
     property var primaryGenericGpu: genericGpuTelemetry.length > 0 ? genericGpuTelemetry[0] : null
@@ -464,8 +462,6 @@ PluginComponent {
         return Theme.barTextSize(root.barThickness, fontScale, maximizeText);
     }
 
-    readonly property real widgetThickness: root.barConfig ? root.barThickness : 160
-    readonly property real barThickness: root.barConfig ? root.barConfig.thickness : 40
     readonly property real gpuUsageValue: root.primaryGpu ? root.clampUsage(root.nvidiaNumber(root.primaryGpu.utilization, 0)) : 0
 
     TextMetrics {
