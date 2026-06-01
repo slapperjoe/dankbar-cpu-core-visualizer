@@ -20,7 +20,6 @@ PluginComponent {
     property int probeInterval: 1000
     property real smoothingFactor: 0.28
     property string colorMode: "vivid"
-    property real fillOverlayOpacity: 0.24
     property bool showOverallPercentage: true
     property real fillOverlayOpacity: 0.24
     property int _colorVersion: 0
