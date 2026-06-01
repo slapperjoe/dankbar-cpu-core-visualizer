@@ -31,6 +31,7 @@ PluginComponent {
         return [DgopService.cpuUsage || 0];
     }
     property var animatedCpuUsage: []
+    property var targetCoreUsage: []  // snapshot target, updated at probe time
 
     // ── Derived ───────────────────────────────────────────────────────
     readonly property real totalCpuUsage: root.clampUsage(Number(DgopService.cpuUsage || 0))
@@ -97,9 +98,10 @@ PluginComponent {
 
     function syncAnimatedUsage(force) {
         let next = root.animatedCpuUsage ? root.animatedCpuUsage.slice() : [];
-        const targetLength = root.rawCoreUsage.length;
+        const targets = root.targetCoreUsage;
+        const targetLength = targets.length || root.rawCoreUsage.length;
         for (let i = 0; i < targetLength; i++) {
-            const target = root.usageFor(i);
+            const target = i < targets.length ? root.clampUsage(Number(targets[i] || 0)) : root.usageFor(i);
             const current = Number(next[i]);
             next[i] = root.syncUsageValue(current, target, force);
         }
@@ -136,6 +138,7 @@ PluginComponent {
         root.fillOverlayOpacity = root.colorMode === "soft" ? 0.22 : 0.24;
         root.showOverallPercentage = pluginData["showOverallPercentage"] !== false;
         DgopService.addRef(["cpu"]);
+        root.targetCoreUsage = root.rawCoreUsage.slice();
         root.syncAnimatedUsage(true);
         DgopService.updateAllStats();
     }
@@ -153,6 +156,7 @@ PluginComponent {
         repeat: true
         onTriggered: {
             DgopService.updateAllStats();
+            root.targetCoreUsage = root.rawCoreUsage.slice();
             root.syncAnimatedUsage(false);
         }
     }
