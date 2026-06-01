@@ -190,6 +190,13 @@ PluginComponent {
     }
 
     // ── Pill layouts ────────────────────────────────────────────
+    TextMetrics {
+        id: speedMetrics
+        font.pixelSize: Math.max(8, root.overallTextSize())
+        font.weight: Font.Medium
+        text: "888.8M/s"
+    }
+
     horizontalBarPill: Component {
         MouseArea {
             implicitWidth: hContentRow.implicitWidth + 24
@@ -207,18 +214,25 @@ PluginComponent {
             Row {
                 id: hContentRow
                 anchors.centerIn: parent
-                spacing: 2
+                spacing: 3
 
-                // Download label
-                StyledText {
+                // Download label (fixed width, right-aligned)
+                Item {
+                    width: Math.ceil(speedMetrics.advanceWidth) + 8
+                    height: hDlLabel.implicitHeight
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "↓ " + root.formatCompactSpeed(root.currentDownloadRate)
-                    color: root.downloadColor
-                    font.pixelSize: Math.max(8, root.overallTextSize())
-                    font.weight: Font.Medium
+                    StyledText {
+                        id: hDlLabel
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "↓ " + root.formatCompactSpeed(root.currentDownloadRate)
+                        color: root.downloadColor
+                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.weight: Font.Medium
+                    }
                 }
 
-                // Mini chart
+                // Mini chart (fixed width)
                 Rectangle {
                     width: root.chartWidth
                     height: Math.max(12, root.barThickness - 8)
@@ -241,13 +255,20 @@ PluginComponent {
                     }
                 }
 
-                // Upload label
-                StyledText {
+                // Upload label (fixed width)
+                Item {
+                    width: Math.ceil(speedMetrics.advanceWidth) + 8
+                    height: hUlLabel.implicitHeight
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "↑ " + root.formatCompactSpeed(root.currentUploadRate)
-                    color: root.uploadColor
-                    font.pixelSize: Math.max(8, root.overallTextSize())
-                    font.weight: Font.Medium
+                    StyledText {
+                        id: hUlLabel
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "↑ " + root.formatCompactSpeed(root.currentUploadRate)
+                        color: root.uploadColor
+                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.weight: Font.Medium
+                    }
                 }
             }
         }
