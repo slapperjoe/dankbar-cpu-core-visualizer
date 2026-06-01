@@ -111,11 +111,8 @@ PluginComponent {
     // ── nvidia-smi processes ─────────────────────────────────
     Process {
         id: nvidiaGpuStatsProcess
-        command: "nvidia-smi"
-        arguments: ["--query-gpu=index,uuid,name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,power.limit,clock.grafix,clock.mem,utilization.enc,utilization.dec", "--format=csv"]
+        command: ["nvidia-smi", "--query-gpu=index,uuid,name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,power.limit,clock.grafix,clock.mem,utilization.enc,utilization.dec", "--format=csv,noheader,nounits"]
         running: false
-        repeat: true
-        interval: 1000
         stdout: StdioCollector {
             onStreamFinished: root.parseNvidiaGpuStats(text)
         }
@@ -123,11 +120,8 @@ PluginComponent {
 
     Process {
         id: nvidiaGpuAppsProcess
-        command: "nvidia-smi"
-        arguments: ["--query-compute-apps=gpu,pid,processName,usedMemory", "--format=csv"]
+        command: ["nvidia-smi", "--query-compute-apps=gpu,pid,processName,usedMemory", "--format=csv,noheader,nounits"]
         running: false
-        repeat: true
-        interval: 2000
         stdout: StdioCollector {
             onStreamFinished: root.parseNvidiaGpuApps(text)
         }
