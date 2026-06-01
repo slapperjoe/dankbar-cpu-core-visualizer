@@ -145,6 +145,7 @@ PluginComponent {
     Component.onDestruction: {
         probeTimer.stop();
         animationTimer.stop();
+        settingsPoller.stop();
         DgopService.removeRef(["cpu"]);
     }
 
@@ -169,6 +170,14 @@ PluginComponent {
         onTriggered: {
             root.syncAnimatedUsage(false);
         }
+    }
+
+    Timer {
+        id: settingsPoller
+        interval: 250
+        running: true
+        repeat: true
+        onTriggered: root.reloadSettings()
     }
 
     function reloadSettings() {
