@@ -22,6 +22,7 @@ PluginComponent {
     property string colorMode: "vivid"
     property real fillOverlayOpacity: 0.24
     property bool showOverallPercentage: true
+    property int _colorVersion: 0
 
     // ── State ─────────────────────────────────────────────────────────
     readonly property var rawCoreUsage: {
@@ -186,6 +187,7 @@ PluginComponent {
         root.colorMode = (pluginData["colorMode"] === "soft") ? "soft" : "vivid";
         root.fillOverlayOpacity = root.colorMode === "soft" ? 0.22 : 0.24;
         root.showOverallPercentage = pluginData["showOverallPercentage"] !== false;
+        root._colorVersion += 1;
     }
 
     // ── TextMetrics for stable pill width ──────────────────────────────
@@ -221,11 +223,12 @@ PluginComponent {
                 Repeater {
                     model: root.displayedCoreCount
                     delegate: Rectangle {
+                        property int _vc: root._colorVersion
                         width: root.barWidth
                         height: root.barThickness - 10
                         radius: root.cornerRadius
-                        color: root.colorFor(index)
-                        opacity: root.fillOverlayOpacity
+                        color: { _vc; root.colorFor(index); }
+                        opacity: { _vc; root.fillOverlayOpacity; }
                         anchors.verticalCenter: parent.verticalCenter
 
                         Rectangle {
@@ -284,11 +287,12 @@ PluginComponent {
                 Repeater {
                     model: root.displayedCoreCount
                     delegate: Rectangle {
+                        property int _vc: root._colorVersion
                         width: root.barWidth
                         height: root.barThickness - 10
                         radius: root.cornerRadius
-                        color: root.colorFor(index)
-                        opacity: root.fillOverlayOpacity
+                        color: { _vc; root.colorFor(index); }
+                        opacity: { _vc; root.fillOverlayOpacity; }
                         anchors.verticalCenter: parent.verticalCenter
 
                         Rectangle {
@@ -376,9 +380,10 @@ PluginComponent {
                     model: root.displayedCoreCount
 
                     delegate: Rectangle {
+                        property int _vc: root._colorVersion
                         property int coreIndex: index
                         property real coreUsage: root.usageFor(index)
-                        property string coreColor: root.colorFor(index)
+                        property string coreColor: { _vc; root.colorFor(index); }
                         property string coreLabel: root.usageLabel(index)
                         property bool isHottest: index === root.hottestCoreIndex()
                         property real cellWidth: Math.max(100, (parent.width - Theme.spacingS * (root.popoutColumns - 1)) / root.popoutColumns)
@@ -396,7 +401,7 @@ PluginComponent {
                             height: parent.height
                             radius: parent.radius
                             color: coreColor
-                            opacity: root.fillOverlayOpacity
+                            opacity: { _vc; root.fillOverlayOpacity; }
                         }
 
                         // Active indicator bar at bottom
