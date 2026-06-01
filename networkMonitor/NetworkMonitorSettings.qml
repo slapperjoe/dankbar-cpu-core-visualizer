@@ -1,52 +1,74 @@
 import QtQuick
-import QtQuick.Controls
 import qs.Common
 import qs.Modules.Plugins
-import qs.Services
 import qs.Widgets
 
 PluginSettings {
     id: root
     pluginId: "networkMonitor"
 
-    property int _probeMs: pluginData["probeInterval"] !== undefined ? pluginData["probeInterval"] : 1000
-
-    StyledText {
-        width: parent.width
-        text: "Network Monitor"
-        font.pixelSize: Theme.fontSizeLarge
-        font.weight: Font.Bold
-        color: Theme.surfaceText
+    SelectionSetting {
+        settingKey: "colorMode"
+        label: "Colour Mode"
+        description: "Vivid or soft palette for network chart"
+        defaultValue: "vivid"
+        options: [{ "label": "Vivid", "value": "vivid" }, { "label": "Soft", "value": "soft" }]
     }
 
-    StyledText {
-        width: parent.width
-        text: "Configure polling, appearance, and chart options."
-        font.pixelSize: Theme.fontSizeSmall
-        color: Theme.surfaceVariantText
-        wrapMode: Text.WordWrap
+    SliderSetting {
+        settingKey: "probeInterval"
+        label: "Probe Interval"
+        description: "How often network stats are refreshed"
+        defaultValue: 1000
+        minimum: 200
+        maximum: 2000
+        unit: "ms"
     }
 
-    Column {
-        width: parent.width
-        spacing: Theme.spacingM
+    SliderSetting {
+        settingKey: "networkChartWidth"
+        label: "Chart Width"
+        description: "Width of the mini chart in the bar pill"
+        defaultValue: 80
+        minimum: 40
+        maximum: 200
+        unit: "px"
+    }
 
-        StyledText {
-            text: "Probe Interval: " + root._probeMs + " ms"
-            color: Theme.surfaceText
-            font.pixelSize: Theme.fontSizeSmall
-        }
+    SliderSetting {
+        settingKey: "chartHeight"
+        label: "Popout Chart Height"
+        description: "Height of the chart in the popout"
+        defaultValue: 80
+        minimum: 40
+        maximum: 200
+        unit: "px"
+    }
 
-        Slider {
-            width: parent.width
-            from: 200
-            to: 2000
-            stepSize: 100
-            value: root._probeMs
-            onValueChanged: {
-                root._probeMs = value;
-                pluginData["probeInterval"] = value;
-            }
-        }
+    SliderSetting {
+        settingKey: "historySize"
+        label: "History Size"
+        description: "Number of data points in the rolling chart"
+        defaultValue: 60
+        minimum: 10
+        maximum: 120
+        unit: "pts"
+    }
+
+    ToggleSetting {
+        settingKey: "showNetworkGrid"
+        label: "Show Grid Lines"
+        description: "Show horizontal guide lines on charts"
+        defaultValue: true
+    }
+
+    SliderSetting {
+        settingKey: "networkLineWidth"
+        label: "Line Width"
+        description: "Stroke width for chart lines"
+        defaultValue: 2
+        minimum: 1
+        maximum: 4
+        unit: "px"
     }
 }

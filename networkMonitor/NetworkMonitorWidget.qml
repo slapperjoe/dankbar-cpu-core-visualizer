@@ -43,14 +43,7 @@ PluginComponent {
 
     // ── Settings load ──────────────────────────────────────────
     Component.onCompleted: {
-        root.probeIntervalMs = Math.max(200, Math.min(2000, Math.round(pluginData["probeInterval"] || 1000)));
-        root.colorMode = pluginData["colorMode"] || "vivid";
-        root.chartHeight = Math.max(40, Math.min(200, Math.round(pluginData["chartHeight"] || 80)));
-        root.historySize = Math.max(10, Math.min(120, Math.round(pluginData["historySize"] || 60)));
-        root.showGrid = pluginData["showNetworkGrid"] !== undefined ? pluginData["showNetworkGrid"] : true;
-        root.lineWidth = Math.max(1, Math.min(4, pluginData["networkLineWidth"] || 2));
-        root.chartWidth = Math.max(40, Math.min(200, Math.round(pluginData["networkChartWidth"] || 80)));
-
+        root._applyPluginData();
         DgopService.addRef(["network"]);
         root.downloadHistory = [];
         root.uploadHistory = [];
@@ -58,6 +51,18 @@ PluginComponent {
 
     Component.onDestruction: {
         DgopService.removeRef(["network"]);
+    }
+
+    onPluginDataChanged: root._applyPluginData()
+
+    function _applyPluginData() {
+        root.probeIntervalMs = Math.max(200, Math.min(2000, Math.round(pluginData["probeInterval"] != null ? pluginData["probeInterval"] : 1000)));
+        root.colorMode = pluginData["colorMode"] || "vivid";
+        root.chartHeight = Math.max(40, Math.min(200, Math.round(pluginData["chartHeight"] != null ? pluginData["chartHeight"] : 80)));
+        root.historySize = Math.max(10, Math.min(120, Math.round(pluginData["historySize"] != null ? pluginData["historySize"] : 60)));
+        root.showGrid = pluginData["showNetworkGrid"] !== false;
+        root.lineWidth = Math.max(1, Math.min(4, pluginData["networkLineWidth"] != null ? pluginData["networkLineWidth"] : 2));
+        root.chartWidth = Math.max(40, Math.min(200, Math.round(pluginData["networkChartWidth"] != null ? pluginData["networkChartWidth"] : 80)));
     }
 
     // ── Probe timer ────────────────────────────────────────────
