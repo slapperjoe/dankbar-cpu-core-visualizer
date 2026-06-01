@@ -231,23 +231,25 @@ PluginComponent {
 
                 Repeater {
                     model: root.displayedCoreCount
-                    delegate: Rectangle {
+                    delegate: Item {
                         property int _vc: root._colorVersion
                         width: root.barWidth
                         height: root.barThickness - 10
-                        radius: root.cornerRadius
-                        color: { _vc; root.colorFor(index); }
-                        opacity: { _vc; root.fillOverlayOpacity; }
                         anchors.verticalCenter: parent.verticalCenter
 
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: root.cornerRadius
+                            color: { _vc; root.colorFor(index); }
+                            opacity: { _vc; root.fillOverlayOpacity; }
+                        }
                         Rectangle {
                             anchors.left: parent.left
                             anchors.bottom: parent.bottom
                             width: parent.width
                             height: Math.max(root.minBarHeight, (root.animatedCpuUsage[index] || 0) / 100 * parent.height)
-                            radius: parent.radius
-                            color: parent.color
-                            opacity: 1.0
+                            radius: root.cornerRadius
+                            color: { _vc; root.colorFor(index); }
                         }
                     }
                 }
@@ -295,23 +297,25 @@ PluginComponent {
 
                 Repeater {
                     model: root.displayedCoreCount
-                    delegate: Rectangle {
+                    delegate: Item {
                         property int _vc: root._colorVersion
                         width: root.barWidth
                         height: root.barThickness - 10
-                        radius: root.cornerRadius
-                        color: { _vc; root.colorFor(index); }
-                        opacity: { _vc; root.fillOverlayOpacity; }
                         anchors.verticalCenter: parent.verticalCenter
 
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: root.cornerRadius
+                            color: { _vc; root.colorFor(index); }
+                            opacity: { _vc; root.fillOverlayOpacity; }
+                        }
                         Rectangle {
                             anchors.left: parent.left
                             anchors.bottom: parent.bottom
                             width: parent.width
                             height: Math.max(root.minBarHeight, (root.animatedCpuUsage[index] || 0) / 100 * parent.height)
-                            radius: parent.radius
-                            color: parent.color
-                            opacity: 1.0
+                            radius: root.cornerRadius
+                            color: { _vc; root.colorFor(index); }
                         }
                     }
                 }
