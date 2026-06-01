@@ -47,7 +47,10 @@ PluginSettings {
             stepSize: 250
             value: Number(pluginData["probeInterval"] !== undefined ? pluginData["probeInterval"] : 1000)
             anchors.verticalCenter: parent.verticalCenter
-            onValueChanged: pluginData["probeInterval"] = Math.round(value)
+            onValueChanged: {
+                pluginData["probeInterval"] = Math.round(value);
+                console.log("cpu-settings: wrote probeInterval=" + Math.round(value));
+            }
         }
 
         StyledText {
@@ -82,7 +85,10 @@ PluginSettings {
             stepSize: 1
             value: Number(pluginData["smoothingPercent"] !== undefined ? pluginData["smoothingPercent"] : 28)
             anchors.verticalCenter: parent.verticalCenter
-            onValueChanged: pluginData["smoothingPercent"] = Math.round(value)
+            onValueChanged: {
+                pluginData["smoothingPercent"] = Math.round(value);
+                console.log("cpu-settings: wrote smoothingPercent=" + Math.round(value));
+            }
         }
 
         StyledText {
@@ -107,7 +113,10 @@ PluginSettings {
 
     Switch {
         checked: pluginData["colorMode"] !== "soft"
-        onToggled: pluginData["colorMode"] = checked ? "vivid" : "soft"
+        onToggled: {
+            pluginData["colorMode"] = checked ? "vivid" : "soft";
+            console.log("cpu-settings: wrote colorMode=" + pluginData["colorMode"]);
+        }
     }
 
     // ── Show overall percentage toggle ─────────────────────────────────

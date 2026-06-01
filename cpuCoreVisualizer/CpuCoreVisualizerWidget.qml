@@ -114,7 +114,7 @@ PluginComponent {
     function tooltipText() {
         const hottest = root.hottestCoreIndex();
         const hottestUsage = root.usageFor(hottest).toFixed(0);
-        return "CPU\nOverall: " + root.totalCpuUsage.toFixed(0) + "%\nHottest: Core " + hottest + " at " + hottestUsage + "%";
+        return "CPU\nOverall: " + root.displayCpuUsage.toFixed(0) + "%\nHottest: Core " + hottest + " at " + hottestUsage + "%";
     }
 
     function shortSummaryText() {
@@ -140,6 +140,7 @@ PluginComponent {
         root.showOverallPercentage = pluginData["showOverallPercentage"] !== false;
         DgopService.addRef(["cpu"]);
         root.targetCoreUsage = root.rawCoreUsage.slice();
+        root.displayCpuUsage = root.clampUsage(Number(DgopService.cpuUsage || 0));
         root.syncAnimatedUsage(true);
         DgopService.updateAllStats();
     }
@@ -159,7 +160,9 @@ PluginComponent {
         onTriggered: {
             DgopService.updateAllStats();
             root.targetCoreUsage = root.rawCoreUsage.slice();
+            root.displayCpuUsage = root.clampUsage(Number(DgopService.cpuUsage || 0));
             root.syncAnimatedUsage(false);
+            console.log("cpu: probe tick, total=" + root.displayCpuUsage.toFixed(0) + "%, cores=" + root.targetCoreUsage.length);
         }
     }
 
@@ -182,15 +185,20 @@ PluginComponent {
     }
 
     function reloadSettings() {
+        var prev = root.probeInterval;
         root.probeInterval = Math.max(250, Math.min(5000, Math.round(pluginData["probeInterval"] !== undefined ? pluginData["probeInterval"] : 1000)));
         root.smoothingFactor = Math.max(0.08, Math.min(0.85, ((pluginData["smoothingPercent"] !== undefined ? pluginData["smoothingPercent"] : 28) / 100)));
+        var prevMode = root.colorMode;
         root.colorMode = (pluginData["colorMode"] === "soft") ? "soft" : "vivid";
         root.fillOverlayOpacity = root.colorMode === "soft" ? 0.22 : 0.24;
         root.showOverallPercentage = pluginData["showOverallPercentage"] !== false;
+        if (prev !== root.probeInterval || prevMode !== root.colorMode)
+            console.log("cpu: reloadSettings probe=" + root.probeInterval + "ms color=" + root.colorMode + " showPct=" + root.showOverallPercentage + " raw=" + JSON.stringify([pluginData["probeInterval"], pluginData["colorMode"], pluginData["showOverallPercentage"]]));
         root._colorVersion += 1;
     }
 
-    // ── TextMetrics for stable pill width ──────────────────────────────
+    // ── Display values (snapshotted, not live) ────────────────────────
+    property real displayCpuUsage: 0  // snapshot of totalCpuUsage for stable display
     TextMetrics {
         id: cpuPercentMetrics
         font.pixelSize: Theme.fontSizeSmall
@@ -252,7 +260,7 @@ PluginComponent {
                     StyledText {
                         id: hPercentLabel
                         anchors.centerIn: parent
-                        text: root.totalCpuUsage.toFixed(0) + "%"
+                        text: root.displayCpuUsage.toFixed(0) + "%"
                         color: "#FFFFFF"
                         font.pixelSize: Theme.fontSizeSmall
                         font.weight: Font.Bold
@@ -316,7 +324,7 @@ PluginComponent {
                     StyledText {
                         id: vPercentLabel
                         anchors.centerIn: parent
-                        text: root.totalCpuUsage.toFixed(0) + "%"
+                        text: root.displayCpuUsage.toFixed(0) + "%"
                         color: "#FFFFFF"
                         font.pixelSize: Theme.fontSizeSmall
                         font.weight: Font.Bold
@@ -366,7 +374,7 @@ PluginComponent {
         PopoutComponent {
             id: popout
             headerText: "CPU Cores"
-            detailsText: "Overall: " + root.totalCpuUsage.toFixed(0) + "%  |  " + root.displayedCoreCount + " cores"
+            detailsText: "Overall: " + root.displayCpuUsage.toFixed(0) + "%  |  " + root.displayedCoreCount + " cores"
             showCloseButton: false
 
             Flow {
