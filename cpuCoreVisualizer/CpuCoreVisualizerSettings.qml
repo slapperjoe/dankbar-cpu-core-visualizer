@@ -49,7 +49,7 @@ PluginSettings {
                 StyledText { text: { root._v; root.formatProbe(root.loadValue("probeInterval", 1000)); }; color: Theme.primary; font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
                 StyledText { text: root.expandedMenu === "probe" ? "▴" : "▾"; color: Theme.surfaceVariantText; font.pixelSize: Theme.fontSizeSmall; anchors.verticalCenter: parent.verticalCenter }
             }
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expandedMenu = root.expandedMenu === "probe" ? "" : "probe"; _v += 1; } }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expandedMenu = root.expandedMenu === "probe" ? "" : "probe"; root._v += 1; } }
         }
         Column {
             visible: root.expandedMenu === "probe"; width: parent.width
@@ -57,7 +57,7 @@ PluginSettings {
                 model: root.probeOptions
                 delegate: Rectangle {
                     property int val: modelData
-                    width: parent.width; height: 38; color: loadHover.containsMouse ? Theme.primaryHoverLight : "transparent"
+                    width: parent.width; height: 38; color: "transparent"
                     border.width: 0; border.color: "transparent"
                     StyledText {
                         anchors.centerIn: parent
@@ -65,7 +65,7 @@ PluginSettings {
                         color: { root._v; root.loadValue("probeInterval", 1000) == val ? Theme.primary : Theme.surfaceText; }
                         font.pixelSize: Theme.fontSizeSmall; font.weight: root.loadValue("probeInterval", 1000) == val ? Font.Medium : Font.Normal
                     }
-                    MouseArea { id: loadHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.saveSetting("probeInterval", val); root.expandedMenu = ""; _v += 1; } }
+                    MouseArea {; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.saveSetting("probeInterval", val); root.expandedMenu = ""; root._v += 1; } }
                 }
             }
         }
@@ -80,7 +80,7 @@ PluginSettings {
                 StyledText { text: { root._v; root.loadValue("smoothingPercent", 28) + "%"; }; color: Theme.primary; font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
                 StyledText { text: root.expandedMenu === "smooth" ? "▴" : "▾"; color: Theme.surfaceVariantText; font.pixelSize: Theme.fontSizeSmall; anchors.verticalCenter: parent.verticalCenter }
             }
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expandedMenu = root.expandedMenu === "smooth" ? "" : "smooth"; _v += 1; } }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expandedMenu = root.expandedMenu === "smooth" ? "" : "smooth"; root._v += 1; } }
         }
         Column {
             visible: root.expandedMenu === "smooth"; width: parent.width
@@ -88,14 +88,14 @@ PluginSettings {
                 model: root.smoothOptions
                 delegate: Rectangle {
                     property int val: modelData
-                    width: parent.width; height: 38; color: smoothHover.containsMouse ? Theme.primaryHoverLight : "transparent"
+                    width: parent.width; height: 38; color: "transparent"
                     StyledText {
                         anchors.centerIn: parent
                         text: { root._v; var cur = root.loadValue("smoothingPercent", 28); return val + "%" + (cur == val ? " ✓" : ""); }
                         color: { root._v; root.loadValue("smoothingPercent", 28) == val ? Theme.primary : Theme.surfaceText; }
                         font.pixelSize: Theme.fontSizeSmall; font.weight: root.loadValue("smoothingPercent", 28) == val ? Font.Medium : Font.Normal
                     }
-                    MouseArea { id: smoothHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.saveSetting("smoothingPercent", val); root.expandedMenu = ""; _v += 1; } }
+                    MouseArea {; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.saveSetting("smoothingPercent", val); root.expandedMenu = ""; root._v += 1; } }
                 }
             }
         }
@@ -110,7 +110,7 @@ PluginSettings {
                 StyledText { text: { root._v; var o = root.loadValue("barOpacity", 0.24); return Math.round(o * 100) + "%"; }; color: Theme.primary; font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
                 StyledText { text: root.expandedMenu === "opacity" ? "▴" : "▾"; color: Theme.surfaceVariantText; font.pixelSize: Theme.fontSizeSmall; anchors.verticalCenter: parent.verticalCenter }
             }
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expandedMenu = root.expandedMenu === "opacity" ? "" : "opacity"; _v += 1; } }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.expandedMenu = root.expandedMenu === "opacity" ? "" : "opacity"; root._v += 1; } }
         }
         Column {
             visible: root.expandedMenu === "opacity"; width: parent.width
@@ -118,14 +118,14 @@ PluginSettings {
                 model: root.opacityOptions
                 delegate: Rectangle {
                     property real val: modelData
-                    width: parent.width; height: 38; color: opacityHover.containsMouse ? Theme.primaryHoverLight : "transparent"
+                    width: parent.width; height: 38; color: "transparent"
                     StyledText {
                         anchors.centerIn: parent
                         text: { root._v; var cur = root.loadValue("barOpacity", 0.24); return Math.round(val * 100) + "%" + (Math.abs(cur - val) < 0.01 ? " ✓" : ""); }
                         color: { root._v; Math.abs(root.loadValue("barOpacity", 0.24) - val) < 0.01 ? Theme.primary : Theme.surfaceText; }
                         font.pixelSize: Theme.fontSizeSmall; font.weight: Math.abs(root.loadValue("barOpacity", 0.24) - val) < 0.01 ? Font.Medium : Font.Normal
                     }
-                    MouseArea { id: opacityHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.saveSetting("barOpacity", val); root.expandedMenu = ""; _v += 1; } }
+                    MouseArea {; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.saveSetting("barOpacity", val); root.expandedMenu = ""; root._v += 1; } }
                 }
             }
         }
