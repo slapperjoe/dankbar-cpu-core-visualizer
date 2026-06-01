@@ -1,129 +1,77 @@
 import QtQuick
+import QtQuick.Controls
 import qs.Common
 import qs.Modules.Plugins
-import qs.Services
 import qs.Widgets
 
 PluginSettings {
     id: root
-
     pluginId: "gpuMonitor"
-    title: "GPU Monitor"
 
-    ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 8
-        spacing: 8
+    StyledText {
+        width: parent.width
+        text: "GPU Monitor"
+        font.pixelSize: Theme.fontSizeLarge
+        font.weight: Font.Bold
+        color: Theme.surfaceText
+    }
+    StyledText {
+        width: parent.width
+        text: "GPU usage bars and temperature monitoring."
+        font.pixelSize: Theme.fontSizeSmall
+        color: Theme.surfaceVariantText
+        wrapMode: Text.WordWrap
+    }
 
-        // ── Polling ───────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Polling"
-
-            PluginSettingsRow {
-                title: "nvidia-smi Polling"
-                subtitle: "Enable periodic nvidia-smi queries for rich telemetry"
-                control: PluginSettingsToggle {
-                    checked: root.pluginData.boolSetting("nvidiaSmiPollingEnabled", true)
-                    onToggled: root.pluginData.setBool("nvidiaSmiPollingEnabled", checked)
-                }
-            }
-
-            PluginSettingsRow {
-                title: "Generic GPU Fallback"
-                subtitle: "Use DMS generic GPU telemetry when nvidia-smi is unavailable"
-                control: PluginSettingsToggle {
-                    checked: root.pluginData.boolSetting("useGenericGpuFallback", true)
-                    onToggled: root.pluginData.setBool("useGenericGpuFallback", checked)
-                }
-            }
-
-            PluginSettingsRow {
-                title: "Probe Interval"
-                subtitle: "How often to request fresh GPU stats (ms)"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("probeInterval", 3000)
-                    min: 500
-                    max: 30000
-                    step: 500
-                    unit: "ms"
-                    onValueChanged: root.pluginData.setNumber("probeInterval", value)
-                }
-            }
+    StyledText {
+        width: parent.width; text: "Probe Interval"
+        font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium
+        color: Theme.surfaceText; topPadding: Theme.spacingM
+    }
+    Row {
+        width: parent.width; spacing: Theme.spacingM
+        Slider {
+            id: probeSlider; width: parent.width - 80
+            from: 500; to: 10000; stepSize: 500
+            value: Number(pluginData["probeInterval"] != null ? pluginData["probeInterval"] : 3000)
+            anchors.verticalCenter: parent.verticalCenter
+            onValueChanged: pluginData["probeInterval"] = Math.round(value)
         }
-
-        // ── Appearance ────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Appearance"
-
-            PluginSettingsRow {
-                title: "Color Mode"
-                subtitle: "Vivid or soft palette for GPU bars"
-                control: PluginSettingsSelector {
-                    options: ["vivid", "soft"]
-                    selected: root.pluginData.stringSetting("colorMode", "vivid")
-                    onSelected: root.pluginData.setString("colorMode", selected)
-                }
-            }
-
-            PluginSettingsRow {
-                title: "Bar Width"
-                subtitle: "Width of each GPU bar in pixels"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("barWidth", 24)
-                    min: 8
-                    max: 80
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("barWidth", value)
-                }
-            }
-
-            PluginSettingsRow {
-                title: "Bar Gap"
-                subtitle: "Spacing between GPU bars"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("barGap", 4)
-                    min: 1
-                    max: 20
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("barGap", value)
-                }
-            }
-
-            PluginSettingsRow {
-                title: "Corner Radius"
-                subtitle: "Rounding of the GPU bar corners"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("cornerRadius", 6)
-                    min: 2
-                    max: 20
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("cornerRadius", value)
-                }
-            }
+        StyledText {
+            text: Math.round(probeSlider.value) + " ms"; width: 70
+            font.pixelSize: Theme.fontSizeSmall; color: Theme.surfaceVariantText
+            anchors.verticalCenter: parent.verticalCenter; horizontalAlignment: Text.AlignRight
         }
+    }
 
-        // ── Animation ─────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Animation"
-
-            PluginSettingsRow {
-                title: "Smoothing"
-                subtitle: "Animation smoothing factor (higher = more smoothing)"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("smoothingPercent", 15)
-                    min: 1
-                    max: 99
-                    step: 1
-                    unit: "%"
-                    onValueChanged: root.pluginData.setNumber("smoothingPercent", value)
-                }
-            }
+    StyledText {
+        width: parent.width; text: "Smoothing"
+        font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium
+        color: Theme.surfaceText; topPadding: Theme.spacingM
+    }
+    Row {
+        width: parent.width; spacing: Theme.spacingM
+        Slider {
+            id: smoothSlider; width: parent.width - 80
+            from: 1; to: 99; stepSize: 1
+            value: Number(pluginData["smoothingPercent"] != null ? pluginData["smoothingPercent"] : 15)
+            anchors.verticalCenter: parent.verticalCenter
+            onValueChanged: pluginData["smoothingPercent"] = Math.round(value)
         }
+        StyledText {
+            text: Math.round(smoothSlider.value) + "%"; width: 70
+            font.pixelSize: Theme.fontSizeSmall; color: Theme.surfaceVariantText
+            anchors.verticalCenter: parent.verticalCenter; horizontalAlignment: Text.AlignRight
+        }
+    }
+
+    StyledText {
+        width: parent.width; text: "Vivid Colours"
+        font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium
+        color: Theme.surfaceText; topPadding: Theme.spacingM
+    }
+    Switch {
+        checked: pluginData["colorMode"] !== "soft"
+        onToggled: pluginData["colorMode"] = checked ? "vivid" : "soft"
     }
 }
