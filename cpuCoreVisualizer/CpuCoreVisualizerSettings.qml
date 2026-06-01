@@ -7,6 +7,19 @@ PluginSettings {
     id: root
     pluginId: "cpuCoreVisualizer"
 
+    property int _v: 0
+
+    function setProbeInterval(ms) { pluginData["probeInterval"] = ms; _v += 1; }
+    function setSmoothing(pct) { pluginData["smoothingPercent"] = pct; _v += 1; }
+    function toggleColorMode() { pluginData["colorMode"] = pluginData["colorMode"] === "soft" ? "vivid" : "soft"; _v += 1; }
+    function toggleShowPct() { pluginData["showOverallPercentage"] = pluginData["showOverallPercentage"] === false ? true : false; _v += 1; }
+    function isActive(key, value, fallbackValue) {
+        _v; // force QML binding re-evaluation on any setting change
+        var stored = pluginData[key];
+        if (stored === undefined) return value === fallbackValue;
+        return stored === value;
+    }
+
     StyledText {
         width: parent.width
         text: "CPU Core Visualizer"
@@ -30,14 +43,14 @@ PluginSettings {
             delegate: Rectangle {
                 property int msValue: modelData
                 width: (parent.width - 5 * Theme.spacingS) / 6; height: 36; radius: Theme.cornerRadius
-                color: pluginData["probeInterval"] === msValue || (pluginData["probeInterval"] === undefined && msValue === 1000) ? Theme.primary : Theme.surfaceContainerHigh
+                color: root.isActive("probeInterval", msValue, 1000) ? Theme.primary : Theme.surfaceContainerHigh
                 border.width: 1; border.color: Theme.outline
                 StyledText {
                     anchors.centerIn: parent; text: msValue >= 1000 ? (msValue / 1000) + "s" : msValue + "ms"
-                    color: pluginData["probeInterval"] === msValue || (pluginData["probeInterval"] === undefined && msValue === 1000) ? Theme.surfaceContainerHigh : Theme.surfaceText
+                    color: root.isActive("probeInterval", msValue, 1000) ? Theme.surfaceContainerHigh : Theme.surfaceText
                     font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                 }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: pluginData["probeInterval"] = msValue }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setProbeInterval(msValue) }
             }
         }
     }
@@ -54,14 +67,14 @@ PluginSettings {
             delegate: Rectangle {
                 property int pctValue: modelData
                 width: (parent.width - 5 * Theme.spacingS) / 6; height: 36; radius: Theme.cornerRadius
-                color: pluginData["smoothingPercent"] === pctValue || (pluginData["smoothingPercent"] === undefined && pctValue === 28) ? Theme.primary : Theme.surfaceContainerHigh
+                color: root.isActive("smoothingPercent", pctValue, 28) ? Theme.primary : Theme.surfaceContainerHigh
                 border.width: 1; border.color: Theme.outline
                 StyledText {
                     anchors.centerIn: parent; text: pctValue + "%"
-                    color: pluginData["smoothingPercent"] === pctValue || (pluginData["smoothingPercent"] === undefined && pctValue === 28) ? Theme.surfaceContainerHigh : Theme.surfaceText
+                    color: root.isActive("smoothingPercent", pctValue, 28) ? Theme.surfaceContainerHigh : Theme.surfaceText
                     font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                 }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: pluginData["smoothingPercent"] = pctValue }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setSmoothing(pctValue) }
             }
         }
     }
@@ -73,17 +86,17 @@ PluginSettings {
     }
     Rectangle {
         width: parent.width; height: 36; radius: Theme.cornerRadius
-        color: pluginData["colorMode"] !== "soft" ? Theme.primary : Theme.surfaceContainerHigh
+        color: { root._v; pluginData["colorMode"] !== "soft" ? Theme.primary : Theme.surfaceContainerHigh; }
         border.width: 1; border.color: Theme.outline
         StyledText {
             anchors.centerIn: parent
-            text: pluginData["colorMode"] !== "soft" ? "Vivid (on)" : "Soft (off)"
-            color: pluginData["colorMode"] !== "soft" ? Theme.surfaceContainerHigh : Theme.surfaceText
+            text: { root._v; pluginData["colorMode"] !== "soft" ? "Vivid (on)" : "Soft (off)"; }
+            color: { root._v; pluginData["colorMode"] !== "soft" ? Theme.surfaceContainerHigh : Theme.surfaceText; }
             font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
         }
         MouseArea {
             anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-            onClicked: pluginData["colorMode"] = pluginData["colorMode"] === "soft" ? "vivid" : "soft"
+            onClicked: root.toggleColorMode()
         }
     }
 
@@ -94,17 +107,17 @@ PluginSettings {
     }
     Rectangle {
         width: parent.width; height: 36; radius: Theme.cornerRadius
-        color: pluginData["showOverallPercentage"] !== false ? Theme.primary : Theme.surfaceContainerHigh
+        color: { root._v; pluginData["showOverallPercentage"] !== false ? Theme.primary : Theme.surfaceContainerHigh; }
         border.width: 1; border.color: Theme.outline
         StyledText {
             anchors.centerIn: parent
-            text: pluginData["showOverallPercentage"] !== false ? "Visible" : "Hidden"
-            color: pluginData["showOverallPercentage"] !== false ? Theme.surfaceContainerHigh : Theme.surfaceText
+            text: { root._v; pluginData["showOverallPercentage"] !== false ? "Visible" : "Hidden"; }
+            color: { root._v; pluginData["showOverallPercentage"] !== false ? Theme.surfaceContainerHigh : Theme.surfaceText; }
             font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
         }
         MouseArea {
             anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-            onClicked: pluginData["showOverallPercentage"] = pluginData["showOverallPercentage"] === false ? true : false
+            onClicked: root.toggleShowPct()
         }
     }
 }

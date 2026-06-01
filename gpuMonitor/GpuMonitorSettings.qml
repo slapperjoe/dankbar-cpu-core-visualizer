@@ -7,6 +7,18 @@ PluginSettings {
     id: root
     pluginId: "gpuMonitor"
 
+    property int _v: 0
+
+    function setProbeInterval(ms) { pluginData["probeInterval"] = ms; _v += 1; }
+    function setSmoothing(pct) { pluginData["smoothingPercent"] = pct; _v += 1; }
+    function toggleColorMode() { pluginData["colorMode"] = pluginData["colorMode"] === "soft" ? "vivid" : "soft"; _v += 1; }
+    function isActive(key, value, fallbackValue) {
+        _v;
+        var stored = pluginData[key];
+        if (stored === undefined) return value === fallbackValue;
+        return stored === value;
+    }
+
     StyledText {
         width: parent.width; text: "GPU Monitor"
         font.pixelSize: Theme.fontSizeLarge; font.weight: Font.Bold; color: Theme.surfaceText
@@ -27,14 +39,14 @@ PluginSettings {
             delegate: Rectangle {
                 property int msValue: modelData
                 width: (parent.width - 5 * Theme.spacingS) / 6; height: 36; radius: Theme.cornerRadius
-                color: pluginData["probeInterval"] === msValue || (pluginData["probeInterval"] === undefined && msValue === 3000) ? Theme.primary : Theme.surfaceContainerHigh
+                color: root.isActive("probeInterval", msValue, 3000) ? Theme.primary : Theme.surfaceContainerHigh
                 border.width: 1; border.color: Theme.outline
                 StyledText {
                     anchors.centerIn: parent; text: msValue >= 1000 ? (msValue/1000)+"s" : msValue+"ms"
-                    color: pluginData["probeInterval"] === msValue || (pluginData["probeInterval"] === undefined && msValue === 3000) ? Theme.surfaceContainerHigh : Theme.surfaceText
+                    color: root.isActive("probeInterval", msValue, 3000) ? Theme.surfaceContainerHigh : Theme.surfaceText
                     font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                 }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: pluginData["probeInterval"] = msValue }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setProbeInterval(msValue) }
             }
         }
     }
@@ -50,14 +62,14 @@ PluginSettings {
             delegate: Rectangle {
                 property int pctValue: modelData
                 width: (parent.width - 5 * Theme.spacingS) / 6; height: 36; radius: Theme.cornerRadius
-                color: pluginData["smoothingPercent"] === pctValue || (pluginData["smoothingPercent"] === undefined && pctValue === 15) ? Theme.primary : Theme.surfaceContainerHigh
+                color: root.isActive("smoothingPercent", pctValue, 15) ? Theme.primary : Theme.surfaceContainerHigh
                 border.width: 1; border.color: Theme.outline
                 StyledText {
                     anchors.centerIn: parent; text: pctValue + "%"
-                    color: pluginData["smoothingPercent"] === pctValue || (pluginData["smoothingPercent"] === undefined && pctValue === 15) ? Theme.surfaceContainerHigh : Theme.surfaceText
+                    color: root.isActive("smoothingPercent", pctValue, 15) ? Theme.surfaceContainerHigh : Theme.surfaceText
                     font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                 }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: pluginData["smoothingPercent"] = pctValue }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setSmoothing(pctValue) }
             }
         }
     }
@@ -68,16 +80,14 @@ PluginSettings {
     }
     Rectangle {
         width: parent.width; height: 36; radius: Theme.cornerRadius
-        color: pluginData["colorMode"] !== "soft" ? Theme.primary : Theme.surfaceContainerHigh
+        color: { root._v; pluginData["colorMode"] !== "soft" ? Theme.primary : Theme.surfaceContainerHigh; }
         border.width: 1; border.color: Theme.outline
         StyledText {
-            anchors.centerIn: parent; text: pluginData["colorMode"] !== "soft" ? "Vivid (on)" : "Soft (off)"
-            color: pluginData["colorMode"] !== "soft" ? Theme.surfaceContainerHigh : Theme.surfaceText
+            anchors.centerIn: parent
+            text: { root._v; pluginData["colorMode"] !== "soft" ? "Vivid (on)" : "Soft (off)"; }
+            color: { root._v; pluginData["colorMode"] !== "soft" ? Theme.surfaceContainerHigh : Theme.surfaceText; }
             font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
         }
-        MouseArea {
-            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-            onClicked: pluginData["colorMode"] = pluginData["colorMode"] === "soft" ? "vivid" : "soft"
-        }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.toggleColorMode() }
     }
 }
