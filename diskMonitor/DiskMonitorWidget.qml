@@ -471,64 +471,72 @@ PluginComponent {
         PopoutComponent {
             id: popout
             headerText: "Disk Monitor"
-            detailsText: root.diskUsageTooltipText
+            detailsText: root.selectedDiskMounts.length + " mount(s) monitored"
             showCloseButton: false
 
             Column {
                 width: parent.width
                 anchors.margins: 8
-                spacing: Theme.spacingM
+                spacing: Theme.spacingS
 
                 Repeater {
                     model: root.selectedDiskMounts
 
                     delegate: Rectangle {
+                        property var mount: modelData
                         width: parent.width
-                        height: 44
+                        height: 52
                         radius: Theme.cornerRadius
-                        color: Theme.withAlpha(Theme.surfaceContainerHigh, Theme.popupTransparency)
+                        color: Theme.surfaceContainerHigh
 
+                        // Background fill bar
+                        Rectangle {
+                            anchors.left: parent.left; anchors.bottom: parent.bottom
+                            width: Math.max(4, (root.diskMountPercent(mount) / 100) * parent.width)
+                            height: parent.height; radius: parent.radius
+                            color: root.colorFor(index); opacity: 0.22
+                        }
+                        // Active indicator
+                        Rectangle {
+                            anchors.left: parent.left; anchors.bottom: parent.bottom
+                            anchors.right: parent.right; height: 2; radius: 1
+                            color: root.colorFor(index)
+                        }
                         Row {
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 8
-
-                            // Bar background
-                            Rectangle {
-                                width: parent.width - 120
-                                height: 10
-                                radius: 5
-                                color: Theme.withAlpha(Theme.surfaceVariant, Theme.popupTransparency)
-
-                                // Bar fill
-                                Rectangle {
-                                    width: (root.animatedDiskUsages[index] || 0) / 100 * parent.width
-                                    height: parent.height
-                                    radius: 5
-                                    color: root.colorFor(index)
-                                    opacity: 0.96
-                                }
-                            }
-
+                            anchors.fill: parent; anchors.margins: Theme.spacingS
+                            spacing: Theme.spacingM
                             StyledText {
-                                width: 100
+                                text: root.diskMountPath(mount); color: Theme.surfaceText
+                                font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: root.diskMountPath(modelData) + "  " + (root.animatedDiskUsages[index] || 0).toFixed(0) + "%"
-                                color: Theme.surfaceText
-                                font.pixelSize: Theme.fontSizeSmall
-                                font.weight: Font.Medium
                                 elide: Text.ElideRight
-                                horizontalAlignment: Text.AlignRight
+                                width: parent.width * 0.35
+                            }
+                            StyledText {
+                                text: root.diskMountPercent(mount).toFixed(0) + "%"
+                                color: Theme.surfaceText
+                                font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Bold
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 36; horizontalAlignment: Text.AlignRight
+                            }
+                            StyledText {
+                                text: {
+                                    var m = mount;
+                                    return String(m.used || "?") + " / " + String(m.size || "?");
+                                }
+                                color: Theme.surfaceVariantText
+                                font.pixelSize: Theme.fontSizeSmall - 1
+                                anchors.verticalCenter: parent.verticalCenter
+                                elide: Text.ElideRight
+                                width: parent.width * 0.35
                             }
                         }
                     }
                 }
 
                 StyledText {
-                    width: parent.width
-                    text: "Waiting for disk stats"
-                    color: Theme.surfaceVariantText
-                    font.pixelSize: Theme.fontSizeSmall
+                    width: parent.width; text: "Waiting for disk stats"
+                    color: Theme.surfaceVariantText; font.pixelSize: Theme.fontSizeSmall
                     horizontalAlignment: Text.AlignCenter
                     visible: root.selectedDiskMounts.length === 0
                 }
