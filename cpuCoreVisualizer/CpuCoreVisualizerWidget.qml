@@ -22,6 +22,7 @@ PluginComponent {
     property string colorMode: "vivid"
     property real fillOverlayOpacity: 0.24
     property bool showOverallPercentage: true
+    property real fillOverlayOpacity: 0.24
     property int _colorVersion: 0
 
     // ── State ─────────────────────────────────────────────────────────
@@ -136,7 +137,7 @@ PluginComponent {
         root.probeInterval = Math.max(250, Math.min(5000, Math.round(pluginData["probeInterval"] !== undefined ? pluginData["probeInterval"] : 1000)));
         root.smoothingFactor = Math.max(0.08, Math.min(0.85, ((pluginData["smoothingPercent"] !== undefined ? pluginData["smoothingPercent"] : 28) / 100)));
         root.colorMode = (pluginData["colorMode"] === "soft") ? "soft" : "vivid";
-        root.fillOverlayOpacity = root.colorMode === "soft" ? 0.22 : 0.24;
+        root.fillOverlayOpacity = Number(pluginData["barOpacity"]) || (root.colorMode === "soft" ? 0.22 : 0.24);
         root.showOverallPercentage = pluginData["showOverallPercentage"] !== false;
         DgopService.addRef(["cpu"]);
         root.targetCoreUsage = root.rawCoreUsage.slice();
@@ -193,7 +194,7 @@ PluginComponent {
         root.probeInterval = Math.max(250, Math.min(5000, Math.round(p("probeInterval", 1000))));
         root.smoothingFactor = Math.max(0.08, Math.min(0.85, (p("smoothingPercent", 28) / 100)));
         root.colorMode = (p("colorMode", "vivid") === "soft") ? "soft" : "vivid";
-        root.fillOverlayOpacity = root.colorMode === "soft" ? 0.22 : 0.24;
+        root.fillOverlayOpacity = Number(p("barOpacity", root.colorMode === "soft" ? 0.22 : 0.24));
         root.showOverallPercentage = p("showOverallPercentage", true) !== false;
         root._colorVersion += 1;
     }
