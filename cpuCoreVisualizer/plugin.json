@@ -4,13 +4,10 @@
     "description": "Per-core CPU usage bars for DankBar",
     "version": "0.2.0",
     "author": "Mark + Copilot",
-    "type": ["widget", "desktop-widget"],
+    "type": "widget",
     "capabilities": ["dankbar-widget", "monitoring", "cpu-visualizer"],
     "component": "./CpuCoreVisualizerWidget.qml",
     "icon": "equalizer",
     "settings": "./CpuCoreVisualizerSettings.qml",
-    "permissions": [
-        "settings_read",
-        "settings_write"
-    ]
+    "permissions": ["settings_read", "settings_write"]
 }

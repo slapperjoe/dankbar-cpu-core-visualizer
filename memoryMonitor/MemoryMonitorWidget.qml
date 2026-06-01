@@ -1,165 +1,46 @@
 import QtQuick
-import Quickshell
 import qs.Common
 import qs.Modules.Plugins
 import qs.Services
 import qs.Widgets
-import QtQuick.Layouts 6.7
 import io.github.dankmachines.dankmaterialshell.theming 1.0 as Theme
 
 PluginComponent {
     id: root
 
-    // ── Properties ─────────────────────────────────────────────
-    property var pluginData: Plugins.PluginStorage
-    property bool isDesktopWidget: false
-
-    // Memory settings
-    property int barWidth: 48
-    property int barGap: 4
-    property int cornerRadius: 6
+    // ── Settings ──────────────────────────────────────────────
+    property int probeIntervalMs: 3000
     property string colorMode: "vivid"
     property int smoothingPercent: 15
-    property int probeInterval: 3000
-    property int sectionPadding: 12
 
-    // Process listing state
-    property string memoryProcessFilter: "all"
-    property string memoryProcessSearchText: ""
-    property string processSortKey: "memory"
-    property bool processSortAscending: false
-    property bool pauseMemoryProcessUpdates: false
-
-    readonly property real smoothingFactor: Math.pow(0.5, smoothingPercent / 100.0)
-    readonly property real animationDuration: 120
-    readonly property real fillOverlayOpacity: 0.96
-    readonly property real sectionGap: barGap
-    readonly property real padding: sectionPadding
-    readonly property real memoryUsageValue: root.clampUsage(Number(DgopService.memoryUsage || 0))
-
-    // Animated memory usage
+    // ── Runtime data ──────────────────────────────────────────
+    readonly property real memoryUsageValue: Math.max(0, Math.min(100, Number(DgopService.memoryUsage || 0)))
     property real animatedMemoryUsage: 0
 
-    // Palettes
-    property var vividPalette: [
-        "#FF2D2D", "#FF6D2D", "#FFB02D", "#2DFF2D", "#2DFFD4", "#2DD4FF",
-        "#5C2DFF", "#D42DFF", "#FF2DC4", "#FF8C2D", "#8CFF2D", "#2DB4FF",
-        "#B42DFF", "#FF2D8C", "#2DFF8C", "#FFD42D", "#2D8CFF", "#D42D8C",
-        "#8C2DFF", "#2DFFB4", "#FF4D2D", "#4DFF2D", "#2DFFB4", "#4D2DFF",
-        "#FF2D6D", "#6DFF2D", "#2DB4D4", "#D42DB4", "#B42DFF", "#FF6D2D",
-        "#2DD4B4", "#6D2DFF"
-    ]
-    property var softPalette: [
-        "#EF9A9A", "#EFB39A", "#EFCB9A", "#9AEF9A", "#9AEFDF", "#9ADCEF",
-        "#A09AEF", "#DFAE9A", "#EF9AC4", "#EFAC9A", "#ACEF9A", "#9ABAEF",
-        "#B09AEE", "#EF9AAC", "#9AEFAC", "#EFD49A", "#9A9BEE", "#AA9AEF",
-        "#9AEEB0", "#EFACAA", "#ACEFAA", "#9AEFCB", "#AA9AEE", "#EF9AB0",
-        "#AC9AEF", "#9AEFBC", "#DFAA9A", "#B09ADE"
-    ]
+    // ── Smoothing ─────────────────────────────────────────────
+    readonly property real smoothingFactor: Math.pow(0.5, smoothingPercent / 100.0)
 
+    // ── 2-color mini palette (usage-based color) ──────────────
+    readonly property string barColor: {
+        const usage = root.animatedMemoryUsage;
+        if (root.colorMode === "soft") {
+            if (usage < 50) return "#9AEF9A";
+            if (usage < 80) return "#EFD49A";
+            return "#EF9A9A";
+        }
+        if (usage < 50) return "#2DFF2D";
+        if (usage < 80) return "#FFD42D";
+        return "#FF2D2D";
+    }
+
+    // ── Process list ──────────────────────────────────────────
     readonly property var memoryProcesses: Array.isArray(DgopService.memoryProcesses) ? DgopService.memoryProcesses : []
 
-    readonly property var filteredMemoryProcesses: {
-        const procs = root.memoryProcesses;
-        if (!Array.isArray(procs) || procs.length === 0)
-            return [];
-
-        let filtered = [];
-        for (let i = 0; i < procs.length; i++) {
-            const proc = procs[i];
-            if (!proc)
-                continue;
-
-            if (root.memoryProcessFilter === "user" && proc.user) {
-                if (String(proc.user).toLowerCase() !== QSysInfo.machineHostName())
-                    continue;
-            }
-
-            if (root.memoryProcessSearchText.length > 0) {
-                const cmd = String(proc.command || "");
-                const fullCmd = String(proc.fullCommand || "");
-                const search = root.memoryProcessSearchText.toLowerCase();
-                if (cmd.toLowerCase().indexOf(search) === -1 && fullCmd.toLowerCase().indexOf(search) === -1)
-                    continue;
-            }
-            filtered.push(proc);
-        }
-        return filtered;
-    }
-
-    property var cachedMemoryProcesses: []
-    onFilteredMemoryProcessesChanged: {
-        if (!root.pauseMemoryProcessUpdates)
-            root.cachedMemoryProcesses = root.filteredMemoryProcesses;
-    }
-    onPauseMemoryProcessUpdatesChanged: {
-        if (!root.pauseMemoryProcessUpdates)
-            root.cachedMemoryProcesses = root.filteredMemoryProcesses;
-    }
-    onMemoryProcessSearchTextChanged: root.cachedMemoryProcesses = root.filteredMemoryProcesses
-    onMemoryProcessFilterChanged: root.cachedMemoryProcesses = root.filteredMemoryProcesses
-    onProcessSortKeyChanged: root.cachedMemoryProcesses = root.filteredMemoryProcesses
-    onProcessSortAscendingChanged: root.cachedMemoryProcesses = root.filteredMemoryProcesses
-
-    readonly property var sortedMemoryProcesses: {
-        const procs = Array.isArray(root.cachedMemoryProcesses) ? root.cachedMemoryProcesses.slice() : [];
-        const asc = root.processSortAscending;
-
-        procs.sort((left, right) => {
-            let result = 0;
-            switch (root.processSortKey) {
-                case "cpu":
-                    result = (Number(right.cpu) || 0) - (Number(left.cpu) || 0);
-                    break;
-                case "memory":
-                    result = (Number(right.memoryKB) || 0) - (Number(left.memoryKB) || 0);
-                    break;
-                case "pid":
-                    result = (Number(left.pid) || 0) - (Number(right.pid) || 0);
-                    break;
-                default:
-                    const cmdL = String(left && left.command || "").toLowerCase();
-                    const cmdR = String(right && right.command || "").toLowerCase();
-                    result = cmdL.localeCompare(cmdR);
-                    break;
-            }
-            return asc ? result : -result;
-        });
-        return procs;
-    }
-
-    // Timers
-    Timer {
-        id: animationTimer
-        interval: 16
-        running: true
-        repeat: true
-        onTriggered: root.syncAnimatedMemoryUsage(true)
-    }
-
-    Timer {
-        id: probeTimer
-        interval: root.probeIntervalMs
-        running: true
-        repeat: true
-        onTriggered: DgopService.updateAllStats()
-    }
-
-    property int probeIntervalMs: probeInterval
-
+    // ── Settings load ─────────────────────────────────────────
     Component.onCompleted: {
-        root.isDesktopWidget = (root.barConfig === undefined || root.barConfig === null);
-        root.colorMode = root.pluginData.stringSetting("colorMode", "vivid");
-        root.barWidth = root.pluginData.numberSetting("barWidth", 48);
-        root.barGap = root.pluginData.numberSetting("barGap", 4);
-        root.smoothingPercent = root.pluginData.numberSetting("smoothingPercent", 15);
-        root.probeInterval = root.pluginData.numberSetting("probeInterval", 3000);
-        root.probeIntervalMs = Math.max(500, Math.min(30000, root.probeInterval));
-        root.smoothingPercent = Math.max(1, Math.min(99, root.smoothingPercent));
-        root.barWidth = Math.max(8, Math.min(80, root.barWidth));
-        root.barGap = Math.max(1, Math.min(20, root.barGap));
-        root.cornerRadius = Math.max(2, Math.min(20, root.pluginData.numberSetting("cornerRadius", 6)));
-
+        root.probeIntervalMs = Math.max(500, Math.min(10000, Math.round(pluginData["probeInterval"] || 3000)));
+        root.colorMode = pluginData["colorMode"] || "vivid";
+        root.smoothingPercent = Math.max(1, Math.min(99, Math.round(pluginData["smoothingPercent"] || 15)));
         DgopService.addRef(["memory", "processes"]);
         root.syncAnimatedMemoryUsage(true);
     }
@@ -168,11 +49,24 @@ PluginComponent {
         DgopService.removeRef(["memory", "processes"]);
     }
 
-    // ── Functions ──────────────────────────────────────────────
-    function clampUsage(value) {
-        return Math.max(0, Math.min(100, Number(value) || 0));
+    // ── Timers ────────────────────────────────────────────────
+    Timer {
+        id: probeTimer
+        interval: root.probeIntervalMs
+        running: true
+        repeat: true
+        onTriggered: DgopService.updateAllStats()
     }
 
+    Timer {
+        id: animationTimer
+        interval: 16
+        running: true
+        repeat: true
+        onTriggered: root.syncAnimatedMemoryUsage(false)
+    }
+
+    // ── Functions ─────────────────────────────────────────────
     function syncUsageValue(current, target, force) {
         if (force || Number.isNaN(current))
             return target;
@@ -186,10 +80,10 @@ PluginComponent {
         root.animatedMemoryUsage = root.syncUsageValue(root.animatedMemoryUsage, root.memoryUsageValue, force);
     }
 
-    function colorFor(index) {
-        if (root.colorMode === "soft")
-            return root.softPalette[index % root.softPalette.length];
-        return root.vividPalette[index % root.vividPalette.length];
+    function overallTextSize() {
+        const fontScale = root.barConfig ? root.barConfig.fontScale : undefined;
+        const maximizeText = root.barConfig ? root.barConfig.maximizeWidgetText : undefined;
+        return Theme.barTextSize(root.barThickness, fontScale, maximizeText);
     }
 
     function processCommand(proc) {
@@ -204,289 +98,359 @@ PluginComponent {
         return slashParts[slashParts.length - 1] || firstToken;
     }
 
-    function processFullCommand(proc) {
-        return String(proc && (proc.fullCommand || proc.command) || "");
-    }
-
-    function overallTextSize() {
-        const fontScale = root.barConfig ? root.barConfig.fontScale : undefined;
-        const maximizeText = root.barConfig ? root.barConfig.maximizeWidgetText : undefined;
-        return Theme.barTextSize(root.barThickness, fontScale, maximizeText);
-    }
-
-    readonly property real barThickness: root.barConfig ? root.barConfig.thickness : 40
-    readonly property real widgetThickness: root.barConfig ? root.barThickness : 160
-
-    // ── Layout ────────────────────────────────────────────────
-    Item {
-        id: container
-
-        width: root.isDesktopWidget ? 500 : (root.barConfig ? root.barConfig.widgetWidth || 500 : 500)
-        height: root.isDesktopWidget ? 400 : (root.barConfig ? root.barThickness || 40 : 400)
-
-        // Desktop widget
-        visible: root.isDesktopWidget
-        Rectangle {
-            anchors.fill: parent
-            color: Theme.surfaceContainer
-            radius: Theme.cornerRadius
-            border.width: 1
-            border.color: Theme.outline
-
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: Theme.spacingM
-                spacing: Theme.spacingM
-
-                // Memory usage card
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 120
-                    radius: Theme.cornerRadius
-                    color: Theme.surfaceContainerHigh
-                    border.width: 1
-                    border.color: Theme.outline
-                    clip: true
-
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.margins: Theme.spacingM
-                        radius: Theme.cornerRadius - 2
-                        color: Theme.surfaceContainer
-                        height: parent.height - Theme.spacingM * 2
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        width: parent.width - Theme.spacingM * 2
-
-                        Column {
-                            anchors.fill: parent
-                            anchors.margins: Theme.spacingS
-                            spacing: Theme.spacingXS
-
-                            Row {
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                spacing: Theme.spacingS
-
-                                DankIcon {
-                                    name: "sd_card"
-                                    size: Theme.iconSize
-                                    color: Theme.surfaceText
-                                }
-
-                                StyledText {
-                                    text: "Memory"
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeMedium
-                                    font.weight: Font.Medium
-                                }
-
-                                Item {
-                                    Layout.fillWidth: true
-                                }
-
-                                StyledText {
-                                    text: root.animatedMemoryUsage.toFixed(0) + "%"
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeMedium
-                                    font.weight: Font.Bold
-                                }
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: 8
-                                radius: 4
-                                color: Theme.surfaceContainerHighest
-
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: parent.width * root.animatedMemoryUsage / 100
-                                    radius: 4
-                                    color: root.colorFor(0)
-                                    opacity: root.fillOverlayOpacity
-
-                                    Behavior on width {
-                                        NumberAnimation {
-                                            duration: root.animationDuration
-                                            easing.type: Easing.OutCubic
-                                        }
-                                    }
-                                }
-                            }
-
-                            StyledText {
-                                width: parent.width
-                                text: {
-                                    const total = Number(DgopService.totalMemoryKB || 0);
-                                    if (total <= 0)
-                                        return "Waiting for memory stats";
-                                    return DgopService.formatSystemMemory(DgopService.usedMemoryKB) + " used  /  " + DgopService.formatSystemMemory(total) + " total";
-                                }
-                                color: Theme.surfaceVariantText
-                                font.pixelSize: Theme.fontSizeSmall
-                            }
-                        }
-                    }
-                }
-
-                // Process list
-                Column {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-
-                    Row {
-                        width: parent.width
-                        spacing: Theme.spacingS
-
-                        TextMetrics {
-                            id: pidColumnMetrics
-                            font.pixelSize: Theme.fontSizeSmall
-                            font.weight: Font.Medium
-                            text: "PID"
-                        }
-
-                        TextMetrics {
-                            id: cpuColumnMetrics
-                            font.pixelSize: Theme.fontSizeSmall
-                            font.weight: Font.Medium
-                            text: "CPU %"
-                        }
-
-                        TextMetrics {
-                            id: memColumnMetrics
-                            font.pixelSize: Theme.fontSizeSmall
-                            font.weight: Font.Medium
-                            text: "MEM %"
-                        }
-                    }
-
-                    ListView {
-                        id: processList
-                        width: parent.width
-                        Layout.fillHeight: true
-                        model: root.sortedMemoryProcesses
-                        delegate: Rectangle {
-                            width: parent.width
-                            height: 56
-                            radius: Theme.cornerRadius
-                            color: processMouse.containsMouse ? Theme.primaryHoverLight : "transparent"
-
-                            Row {
-                                anchors.fill: parent
-                                anchors.margins: Theme.spacingS
-                                spacing: Theme.spacingS
-
-                                StyledText {
-                                    width: Math.ceil(pidColumnMetrics.advanceWidth)
-                                    text: String(modelData.pid || "")
-                                    color: Theme.surfaceVariantText
-                                    font.pixelSize: Theme.fontSizeSmall
-                                }
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: root.processCommand(modelData)
-                                    color: Theme.surfaceText
-                                    font.pixelSize: Theme.fontSizeSmall
-                                    elide: Text.ElideMiddle
-                                }
-
-                                StyledText {
-                                    width: Math.ceil(cpuColumnMetrics.advanceWidth)
-                                    text: (modelData.cpu || 0).toFixed(1) + "%"
-                                    color: Theme.surfaceVariantText
-                                    font.pixelSize: Theme.fontSizeSmall
-                                    horizontalAlignment: Text.AlignRight
-                                }
-
-                                StyledText {
-                                    width: Math.ceil(memColumnMetrics.advanceWidth)
-                                    text: (modelData.mem || 0).toFixed(1) + "%"
-                                    color: Theme.surfaceVariantText
-                                    font.pixelSize: Theme.fontSizeSmall
-                                    horizontalAlignment: Text.AlignRight
-                                }
-
-                                MouseArea {
-                                    id: processMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                }
-                            }
-                        }
-                    }
-                }
+    // ── Horizontal bar pill ───────────────────────────────────
+    horizontalBarPill: Component {
+        MouseArea {
+            implicitWidth: hContentRow.implicitWidth + 24
+            implicitHeight: root.barThickness
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton)
+                    root.pillRightClickAction();
+                else
+                    root.pillClickAction();
             }
-        }
-
-        // DankBar widget
-        visible: !root.isDesktopWidget
-        Rectangle {
-            anchors.fill: parent
-            color: "transparent"
 
             Row {
-                anchors.fill: parent
-                anchors.margins: root.padding
-                spacing: root.barGap
+                id: hContentRow
+                anchors.centerIn: parent
+                spacing: 4
 
                 Rectangle {
-                    width: root.barWidth
-                    height: parent.height
-                    radius: Math.min(root.cornerRadius, width / 2)
+                    width: Math.max(24, root.barThickness * 1.2)
+                    height: Math.max(8, root.barThickness - 8)
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: Math.min(4, height / 2)
                     color: Theme.surfaceContainerHigh
                     clip: true
 
                     Rectangle {
                         anchors.bottom: parent.bottom
                         anchors.left: parent.left
-                        width: parent.width
+                        anchors.right: parent.right
                         height: Math.max(2, root.animatedMemoryUsage / 100 * parent.height)
-                        radius: Math.min(root.cornerRadius, width / 2)
-                        color: root.colorFor(0)
-                        opacity: root.fillOverlayOpacity
+                        radius: Math.min(4, parent.height / 2)
+                        color: root.barColor
 
                         Behavior on height {
                             NumberAnimation {
-                                duration: root.animationDuration
+                                duration: 120
                                 easing.type: Easing.OutCubic
                             }
                         }
                     }
                 }
 
-                Row {
+                DankIcon {
+                    name: "sd_card"
+                    size: Theme.iconSize - 4
+                    color: Theme.widgetTextColor
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 2
-                    visible: true
-
-                    DankIcon {
-                        name: "sd_card"
-                        size: Theme.iconSize
-                        color: Theme.widgetTextColor
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-
-                    StyledText {
-                        id: metricLabel
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.animatedMemoryUsage.toFixed(0) + "%"
-                        color: Theme.widgetTextColor
-                        font.pixelSize: root.overallTextSize()
-                        font.weight: Font.Medium
-                    }
                 }
-            }
 
-            HoverHandler {
-                onHoveredChanged: {
-                    root.barHovered = hovered;
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.animatedMemoryUsage.toFixed(0) + "%"
+                    color: Theme.widgetTextColor
+                    font.pixelSize: Math.max(8, root.overallTextSize())
+                    font.weight: Font.Medium
                 }
             }
         }
     }
+
+    // ── Vertical bar pill ─────────────────────────────────────
+    verticalBarPill: Component {
+        MouseArea {
+            implicitWidth: vContentColumn.implicitWidth + 16
+            implicitHeight: root.barThickness
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton)
+                    root.pillRightClickAction();
+                else
+                    root.pillClickAction();
+            }
+
+            Column {
+                id: vContentColumn
+                anchors.centerIn: parent
+                spacing: 2
+
+                StyledText {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: root.animatedMemoryUsage.toFixed(0) + "%"
+                    color: Theme.widgetTextColor
+                    font.pixelSize: Math.max(7, root.overallTextSize() - 1)
+                    font.weight: Font.Medium
+                }
+
+                Rectangle {
+                    width: Math.max(12, root.barThickness * 0.4)
+                    height: Math.max(30, root.barThickness * 1.2)
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    radius: Math.min(4, width / 2)
+                    color: Theme.surfaceContainerHigh
+                    clip: true
+
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: Math.max(2, root.animatedMemoryUsage / 100 * parent.height)
+                        radius: Math.min(4, parent.width / 2)
+                        color: root.barColor
+
+                        Behavior on height {
+                            NumberAnimation {
+                                duration: 120
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pillClickAction: function() {
+        root.openPopout();
+    }
+
+    pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
+        root.openPopout();
+    }
+
+    function openPopout() {
+        var popout = null;
+        var pill = null;
+        for (var i = 0; i < root.children.length; i++) {
+            var child = root.children[i];
+            if (typeof child.setTriggerPosition === "function")
+                popout = child;
+            if (typeof child.mapToItem === "function" && child.width !== undefined && child.width > 0 && typeof child.setTriggerPosition !== "function")
+                pill = child;
+        }
+        if (popout && pill) {
+            var globalPos = pill.mapToItem(null, 0, 0);
+            var screen = root.parentScreen || Screen;
+            var pos = SettingsData.getPopupTriggerPosition(globalPos, screen, root.barThickness, pill.width, 8, 0, null);
+            popout.setTriggerPosition(pos.x, pos.y, pos.width, root.section, screen, 0, root.barThickness, 8, null);
+            popout.toggle();
+        }
+    }
+
+    // ── Popout content ────────────────────────────────────────
+    popoutContent: Component {
+        PopoutComponent {
+            id: popout
+            headerText: "Memory Monitor"
+            detailsText: root.animatedMemoryUsage.toFixed(0) + "% used  |  " +
+                DgopService.formatSystemMemory(DgopService.usedMemoryKB) + " / " +
+                DgopService.formatSystemMemory(DgopService.totalMemoryKB)
+            showCloseButton: false
+
+            Column {
+                width: parent.width
+                anchors.margins: 8
+                anchors.left: parent.left
+                anchors.right: parent.right
+                spacing: Theme.spacingM
+
+                // ── Memory usage card ──────────────────
+                Rectangle {
+                    width: parent.width
+                    height: 80
+                    color: Theme.surfaceContainerHigh
+                    radius: Theme.cornerRadius
+                    border.width: 1
+                    border.color: Theme.outline
+
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: Theme.spacingM
+                        spacing: Theme.spacingXS
+
+                        Row {
+                            width: parent.width
+                            spacing: Theme.spacingS
+
+                            DankIcon {
+                                name: "sd_card"
+                                size: Theme.iconSize
+                                color: Theme.surfaceText
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            StyledText {
+                                text: "Memory Usage"
+                                color: Theme.surfaceText
+                                font.pixelSize: Theme.fontSizeMedium
+                                font.weight: Font.Medium
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Item {
+                                width: parent.width - Theme.iconSize - Theme.spacingS - usagePctLabel.implicitWidth - Theme.spacingS
+                                height: 1
+                            }
+
+                            StyledText {
+                                id: usagePctLabel
+                                text: root.animatedMemoryUsage.toFixed(0) + "%"
+                                color: Theme.surfaceText
+                                font.pixelSize: Theme.fontSizeMedium
+                                font.weight: Font.Bold
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: 8
+                            radius: 4
+                            color: Theme.surfaceContainerHighest
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: parent.width * root.animatedMemoryUsage / 100
+                                radius: 4
+                                color: root.barColor
+
+                                Behavior on width {
+                                    NumberAnimation {
+                                        duration: 120
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                            }
+                        }
+
+                        StyledText {
+                            width: parent.width
+                            text: DgopService.formatSystemMemory(DgopService.usedMemoryKB) + " used  /  " +
+                                  DgopService.formatSystemMemory(DgopService.totalMemoryKB) + " total"
+                            color: Theme.surfaceVariantText
+                            font.pixelSize: Theme.fontSizeSmall
+                        }
+                    }
+                }
+
+                // ── Process list header ──────────────────
+                Row {
+                    width: parent.width
+                    spacing: Theme.spacingS
+
+                    StyledText {
+                        text: "PID"
+                        color: Theme.surfaceVariantText
+                        font.pixelSize: Theme.fontSizeSmall
+                        font.weight: Font.Medium
+                        width: 50
+                    }
+
+                    StyledText {
+                        text: "Process"
+                        color: Theme.surfaceVariantText
+                        font.pixelSize: Theme.fontSizeSmall
+                        font.weight: Font.Medium
+                        width: parent.width - 50 - 50 - 50 - 3 * Theme.spacingS
+                        elide: Text.ElideRight
+                    }
+
+                    StyledText {
+                        text: "CPU"
+                        color: Theme.surfaceVariantText
+                        font.pixelSize: Theme.fontSizeSmall
+                        font.weight: Font.Medium
+                        width: 50
+                        horizontalAlignment: Text.AlignRight
+                    }
+
+                    StyledText {
+                        text: "MEM"
+                        color: Theme.surfaceVariantText
+                        font.pixelSize: Theme.fontSizeSmall
+                        font.weight: Font.Medium
+                        width: 50
+                        horizontalAlignment: Text.AlignRight
+                    }
+                }
+
+                // ── Process list ─────────────────────────
+                ListView {
+                    id: processList
+                    width: parent.width
+                    height: Math.min(300, root.memoryProcesses.length * 36)
+                    model: root.memoryProcesses
+                    clip: true
+                    spacing: 0
+
+                    delegate: Rectangle {
+                        property var proc: modelData
+                        width: parent.width
+                        height: 36
+                        color: procMouse.containsMouse ? Theme.primaryHoverLight : "transparent"
+                        radius: Theme.cornerRadius
+
+                        Row {
+                            anchors.fill: parent
+                            anchors.leftMargin: 4
+                            anchors.rightMargin: 4
+                            spacing: Theme.spacingS
+
+                            StyledText {
+                                width: 50
+                                text: String(proc.pid || "")
+                                color: Theme.surfaceVariantText
+                                font.pixelSize: Theme.fontSizeSmall
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            StyledText {
+                                width: parent.width - 50 - 50 - 50 - 3 * Theme.spacingS
+                                text: root.processCommand(proc)
+                                color: Theme.surfaceText
+                                font.pixelSize: Theme.fontSizeSmall
+                                elide: Text.ElideMiddle
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            StyledText {
+                                width: 50
+                                text: (Number(proc.cpu) || 0).toFixed(1) + "%"
+                                color: Theme.surfaceVariantText
+                                font.pixelSize: Theme.fontSizeSmall
+                                horizontalAlignment: Text.AlignRight
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            StyledText {
+                                width: 50
+                                text: (Number(proc.mem) || 0).toFixed(1) + "%"
+                                color: Theme.surfaceVariantText
+                                font.pixelSize: Theme.fontSizeSmall
+                                horizontalAlignment: Text.AlignRight
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        MouseArea {
+                            id: procMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                        }
+                    }
+                }
+            }
+        }
+    }
+    popoutWidth: 380
+    popoutHeight: 0
 }

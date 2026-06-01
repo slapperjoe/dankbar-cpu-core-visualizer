@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import qs.Common
 import qs.Modules.Plugins
 import qs.Services
@@ -6,22 +7,7 @@ import qs.Widgets
 
 PluginSettings {
     id: root
-
     pluginId: "cpuCoreVisualizer"
-
-    function normalizedColorMode(candidate) {
-        const value = String(candidate || "vivid");
-        if (value === "soft" || value === "mono" || value === "base")
-            return "soft";
-        return "vivid";
-    }
-
-    Component.onCompleted: {
-        const stored = root.loadValue("colorMode", "vivid");
-        const normalized = root.normalizedColorMode(stored);
-        if (stored !== normalized)
-            root.saveValue("colorMode", normalized);
-    }
 
     StyledText {
         width: parent.width
@@ -33,118 +19,227 @@ PluginSettings {
 
     StyledText {
         width: parent.width
-        text: "Per-core CPU usage visualization."
+        text: "Per-core CPU usage bars for DankBar."
         font.pixelSize: Theme.fontSizeSmall
         color: Theme.surfaceVariantText
         wrapMode: Text.WordWrap
     }
 
-    SelectionSetting {
-        settingKey: "colorMode"
-        label: "Colour Mode"
-        description: "Choose the palette for bar fills."
-        options: [{
-            "label": "Vivid",
-            "value": "vivid"
-        }, {
-            "label": "Soft",
-            "value": "soft"
-        }]
-        defaultValue: "vivid"
+    // ── Probe interval ────────────────────────────────────────────────
+    StyledText {
+        width: parent.width
+        text: "Probe Interval"
+        font.pixelSize: Theme.fontSizeMedium
+        font.weight: Font.Medium
+        color: Theme.surfaceText
+        topPadding: Theme.spacingM
     }
 
-    ToggleSetting {
-        settingKey: "showOverallPercentage"
-        label: "Show Section Values"
-        description: "Show the compact value text beside each section"
-        defaultValue: true
+    StyledText {
+        width: parent.width
+        text: "How often CPU stats are refreshed."
+        font.pixelSize: Theme.fontSizeSmall
+        color: Theme.surfaceVariantText
     }
 
-    SliderSetting {
-        settingKey: "barWidth"
-        label: "Bar Width"
-        description: "Width of each core bar"
-        defaultValue: 4
-        minimum: 2
-        maximum: 24
-        unit: "px"
-        leftIcon: "width_normal"
+    Row {
+        width: parent.width
+        spacing: Theme.spacingM
+
+        Slider {
+            id: probeSlider
+            width: parent.width - 80
+            from: 250
+            to: 5000
+            stepSize: 250
+            value: Number(pluginData["probeInterval"]) || 1000
+            anchors.verticalCenter: parent.verticalCenter
+            onValueChanged: {
+                pluginData["probeInterval"] = Math.round(value);
+            }
+        }
+
+        StyledText {
+            text: Math.round(probeSlider.value) + " ms"
+            width: 70
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.surfaceVariantText
+            anchors.verticalCenter: parent.verticalCenter
+            horizontalAlignment: Text.AlignRight
+        }
     }
 
-    SliderSetting {
-        settingKey: "barGap"
-        label: "Bar Gap"
-        description: "Gap between bars"
-        defaultValue: 2
-        minimum: 0
-        maximum: 10
-        unit: "px"
-        leftIcon: "space_bar"
+    // ── Smoothing ─────────────────────────────────────────────────────
+    StyledText {
+        width: parent.width
+        text: "Animation Smoothing"
+        font.pixelSize: Theme.fontSizeMedium
+        font.weight: Font.Medium
+        color: Theme.surfaceText
+        topPadding: Theme.spacingM
     }
 
-    SliderSetting {
-        settingKey: "maxVisibleCores"
-        label: "Visible Cores"
-        description: "Maximum number of cores shown before clipping"
-        defaultValue: 32
-        minimum: 1
-        maximum: 32
-        unit: ""
-        rightIcon: "memory"
+    StyledText {
+        width: parent.width
+        text: "Lower values glide more; higher values snap faster."
+        font.pixelSize: Theme.fontSizeSmall
+        color: Theme.surfaceVariantText
     }
 
-    SliderSetting {
-        settingKey: "minBarHeight"
-        label: "Minimum Bar Size"
-        description: "Set to 0 if you want truly empty idle bars"
-        defaultValue: 2
-        minimum: 0
-        maximum: 8
-        unit: "px"
-        leftIcon: "height"
+    Row {
+        width: parent.width
+        spacing: Theme.spacingM
+
+        Slider {
+            id: smoothingSlider
+            width: parent.width - 80
+            from: 8
+            to: 85
+            stepSize: 1
+            value: Number(pluginData["smoothingPercent"]) || 28
+            anchors.verticalCenter: parent.verticalCenter
+            onValueChanged: {
+                pluginData["smoothingPercent"] = Math.round(value);
+            }
+        }
+
+        StyledText {
+            text: Math.round(smoothingSlider.value) + "%"
+            width: 70
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.surfaceVariantText
+            anchors.verticalCenter: parent.verticalCenter
+            horizontalAlignment: Text.AlignRight
+        }
     }
 
-    SliderSetting {
-        settingKey: "cornerRadius"
-        label: "Roundness"
-        description: "Corner radius for each bar"
-        defaultValue: 2
-        minimum: 0
-        maximum: 8
-        unit: "px"
-        leftIcon: "rounded_corner"
+    // ── Color mode ────────────────────────────────────────────────────
+    StyledText {
+        width: parent.width
+        text: "Colour Mode"
+        font.pixelSize: Theme.fontSizeMedium
+        font.weight: Font.Medium
+        color: Theme.surfaceText
+        topPadding: Theme.spacingM
     }
 
-    SliderSetting {
-        settingKey: "probeInterval"
-        label: "Probe Time"
-        description: "How often the plugin refreshes CPU stats"
-        defaultValue: 1000
-        minimum: 250
-        maximum: 3000
-        unit: "ms"
-        leftIcon: "timer"
+    Row {
+        width: parent.width
+        spacing: Theme.spacingS
+
+        Rectangle {
+            width: (parent.width - Theme.spacingS) / 2
+            height: 36
+            radius: Theme.cornerRadius
+            color: pluginData["colorMode"] === "vivid" || pluginData["colorMode"] === undefined ? Theme.primary : Theme.surfaceContainerHigh
+            border.width: 1
+            border.color: Theme.outline
+
+            StyledText {
+                anchors.centerIn: parent
+                text: "Vivid"
+                color: pluginData["colorMode"] === "vivid" || pluginData["colorMode"] === undefined ? Theme.surfaceContainerHigh : Theme.surfaceText
+                font.pixelSize: Theme.fontSizeSmall
+                font.weight: Font.Medium
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    pluginData["colorMode"] = "vivid";
+                }
+            }
+        }
+
+        Rectangle {
+            width: (parent.width - Theme.spacingS) / 2
+            height: 36
+            radius: Theme.cornerRadius
+            color: pluginData["colorMode"] === "soft" ? Theme.primary : Theme.surfaceContainerHigh
+            border.width: 1
+            border.color: Theme.outline
+
+            StyledText {
+                anchors.centerIn: parent
+                text: "Soft"
+                color: pluginData["colorMode"] === "soft" ? Theme.surfaceContainerHigh : Theme.surfaceText
+                font.pixelSize: Theme.fontSizeSmall
+                font.weight: Font.Medium
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    pluginData["colorMode"] = "soft";
+                }
+            }
+        }
     }
 
-    SliderSetting {
-        settingKey: "smoothingPercent"
-        label: "Animation Smoothing"
-        description: "Lower values glide more; higher values snap faster"
-        defaultValue: 28
-        minimum: 8
-        maximum: 85
-        unit: ""
-        leftIcon: "timeline"
+    // ── Show overall percentage ───────────────────────────────────────
+    StyledText {
+        width: parent.width
+        text: "Show Overall Percentage"
+        font.pixelSize: Theme.fontSizeMedium
+        font.weight: Font.Medium
+        color: Theme.surfaceText
+        topPadding: Theme.spacingM
     }
 
-    SliderSetting {
-        settingKey: "animationDuration"
-        label: "Animation Length"
-        description: "How long each update glides for"
-        defaultValue: 650
-        minimum: 120
-        maximum: 1600
-        unit: "ms"
-        leftIcon: "slow_motion_video"
+    Row {
+        width: parent.width
+        spacing: Theme.spacingS
+
+        Rectangle {
+            width: (parent.width - Theme.spacingS) / 2
+            height: 36
+            radius: Theme.cornerRadius
+            color: pluginData["showOverallPercentage"] !== false ? Theme.primary : Theme.surfaceContainerHigh
+            border.width: 1
+            border.color: Theme.outline
+
+            StyledText {
+                anchors.centerIn: parent
+                text: "Show"
+                color: pluginData["showOverallPercentage"] !== false ? Theme.surfaceContainerHigh : Theme.surfaceText
+                font.pixelSize: Theme.fontSizeSmall
+                font.weight: Font.Medium
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    pluginData["showOverallPercentage"] = true;
+                }
+            }
+        }
+
+        Rectangle {
+            width: (parent.width - Theme.spacingS) / 2
+            height: 36
+            radius: Theme.cornerRadius
+            color: pluginData["showOverallPercentage"] === false ? Theme.primary : Theme.surfaceContainerHigh
+            border.width: 1
+            border.color: Theme.outline
+
+            StyledText {
+                anchors.centerIn: parent
+                text: "Hide"
+                color: pluginData["showOverallPercentage"] === false ? Theme.surfaceContainerHigh : Theme.surfaceText
+                font.pixelSize: Theme.fontSizeSmall
+                font.weight: Font.Medium
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    pluginData["showOverallPercentage"] = false;
+                }
+            }
+        }
     }
 }

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import qs.Common
 import qs.Modules.Plugins
 import qs.Services
@@ -6,105 +7,129 @@ import qs.Widgets
 
 PluginSettings {
     id: root
-
     pluginId: "memoryMonitor"
-    title: "Memory Monitor"
 
-    ColumnLayout {
+    Column {
         anchors.fill: parent
-        anchors.margins: 8
-        spacing: 8
+        anchors.margins: 12
+        spacing: 16
 
-        // ── Polling ───────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Polling"
+        // ── Header ──────────────────────────────────────────
+        StyledText {
+            width: parent.width
+            text: "Memory Monitor Settings"
+            font.pixelSize: Theme.fontSizeLarge
+            font.weight: Font.Bold
+            color: Theme.surfaceText
+        }
 
-            PluginSettingsRow {
-                title: "Probe Interval"
-                subtitle: "How often to request fresh memory stats (ms)"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("probeInterval", 3000)
-                    min: 500
-                    max: 30000
-                    step: 500
-                    unit: "ms"
-                    onValueChanged: root.pluginData.setNumber("probeInterval", value)
-                }
+        StyledText {
+            width: parent.width
+            text: "Configure polling, appearance, and animation for the memory usage monitor."
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.surfaceVariantText
+            wrapMode: Text.WordWrap
+        }
+
+        // ── Probe Interval ──────────────────────────────────
+        StyledText {
+            text: "Probe Interval"
+            font.pixelSize: Theme.fontSizeMedium
+            font.weight: Font.Medium
+            color: Theme.surfaceText
+        }
+
+        StyledText {
+            text: "How often to request fresh memory stats (ms)"
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.surfaceVariantText
+        }
+
+        Row {
+            spacing: 8
+
+            Slider {
+                id: probeSlider
+                from: 500
+                to: 10000
+                stepSize: 500
+                value: pluginData["probeInterval"] || 3000
+                onValueChanged: pluginData["probeInterval"] = value
+            }
+
+            StyledText {
+                text: Math.round(probeSlider.value) + " ms"
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.surfaceText
+                anchors.verticalCenter: parent.verticalCenter
+                width: 60
             }
         }
 
-        // ── Appearance ────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Appearance"
+        // ── Color Mode ──────────────────────────────────────
+        StyledText {
+            text: "Color Mode"
+            font.pixelSize: Theme.fontSizeMedium
+            font.weight: Font.Medium
+            color: Theme.surfaceText
+        }
 
-            PluginSettingsRow {
-                title: "Color Mode"
-                subtitle: "Vivid or soft palette for memory bar"
-                control: PluginSettingsSelector {
-                    options: ["vivid", "soft"]
-                    selected: root.pluginData.stringSetting("colorMode", "vivid")
-                    onSelected: root.pluginData.setString("colorMode", selected)
-                }
+        StyledText {
+            text: "Bar color palette: vivid (bright) or soft (muted)"
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.surfaceVariantText
+        }
+
+        Row {
+            spacing: 8
+
+            Button {
+                text: "Vivid"
+                checked: (pluginData["colorMode"] || "vivid") === "vivid"
+                checkable: true
+                onClicked: pluginData["colorMode"] = "vivid"
             }
 
-            PluginSettingsRow {
-                title: "Bar Width"
-                subtitle: "Width of the memory bar in pixels"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("barWidth", 48)
-                    min: 8
-                    max: 80
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("barWidth", value)
-                }
-            }
-
-            PluginSettingsRow {
-                title: "Bar Gap"
-                subtitle: "Spacing between bar and percentage text"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("barGap", 4)
-                    min: 1
-                    max: 20
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("barGap", value)
-                }
-            }
-
-            PluginSettingsRow {
-                title: "Corner Radius"
-                subtitle: "Rounding of the memory bar corners"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("cornerRadius", 6)
-                    min: 2
-                    max: 20
-                    step: 1
-                    unit: "px"
-                    onValueChanged: root.pluginData.setNumber("cornerRadius", value)
-                }
+            Button {
+                text: "Soft"
+                checked: (pluginData["colorMode"] || "vivid") === "soft"
+                checkable: true
+                onClicked: pluginData["colorMode"] = "soft"
             }
         }
 
-        // ── Animation ─────────────────────────────────────
-        PluginSettingsGroup {
-            Layout.fillWidth: true
-            title: "Animation"
+        // ── Smoothing ───────────────────────────────────────
+        StyledText {
+            text: "Smoothing"
+            font.pixelSize: Theme.fontSizeMedium
+            font.weight: Font.Medium
+            color: Theme.surfaceText
+        }
 
-            PluginSettingsRow {
-                title: "Smoothing"
-                subtitle: "Animation smoothing factor (higher = more smoothing)"
-                control: PluginSettingsSlider {
-                    value: root.pluginData.numberSetting("smoothingPercent", 15)
-                    min: 1
-                    max: 99
-                    step: 1
-                    unit: "%"
-                    onValueChanged: root.pluginData.setNumber("smoothingPercent", value)
-                }
+        StyledText {
+            text: "Animation smoothing factor (higher = smoother but slower)"
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.surfaceVariantText
+        }
+
+        Row {
+            spacing: 8
+
+            Slider {
+                id: smoothingSlider
+                from: 1
+                to: 99
+                stepSize: 1
+                value: pluginData["smoothingPercent"] || 15
+                onValueChanged: pluginData["smoothingPercent"] = value
+            }
+
+            StyledText {
+                text: Math.round(smoothingSlider.value) + "%"
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.surfaceText
+                anchors.verticalCenter: parent.verticalCenter
+                width: 40
             }
         }
     }

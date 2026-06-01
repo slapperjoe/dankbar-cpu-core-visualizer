@@ -1,9 +1,9 @@
 import QtQuick
-import Quickshell
 import qs.Common
 import qs.Modules.Plugins
 import qs.Services
 import qs.Widgets
+import io.github.dankmachines.dankmaterialshell.theming 1.0 as Theme
 
 PluginComponent {
     id: root
@@ -12,28 +12,26 @@ PluginComponent {
     property var vividPalette: ["#ff003c", "#ff4f00", "#ff7a00", "#ffb000", "#ffd400", "#f5ff00", "#c8ff00", "#8dff00", "#53ff00", "#00ff1e", "#00ff6a", "#00ffae", "#00ffd5", "#00e5ff", "#00b3ff", "#0080ff", "#0057ff", "#3040ff", "#5c2dff", "#7d1fff", "#9d00ff", "#c200ff", "#e100ff", "#ff00e1", "#ff00b8", "#ff008f", "#ff0066", "#ff335f", "#ff5c5c", "#ff7f50", "#ff9f1c", "#ffcf33"]
     property var softPalette: ["#ff8aa5", "#ffac7a", "#ffc27a", "#ffd86e", "#fff07a", "#dcff8a", "#b8ff94", "#8eff9d", "#7fffb8", "#7fffd8", "#80f3ff", "#82dcff", "#86c3ff", "#90acff", "#a595ff", "#bc8cff", "#d38bff", "#ea8cff", "#ff8fe8", "#ff93cf", "#ff95b5", "#ff9c9c", "#ffb091", "#ffc188", "#ffd487", "#f1e88f", "#d7f39a", "#bbeea8", "#a6e8bf", "#9be1d4", "#a2d8e6", "#b4cfee"]
 
-    // ── Settings ──────────────────────────────────────────────────────
-    property int barWidth: Math.max(2, Math.round(numberSetting("barWidth", 4)))
-    property int barGap: Math.max(0, Math.round(numberSetting("barGap", 2)))
-    property int maxVisibleCores: Math.max(1, Math.round(numberSetting("maxVisibleCores", 32)))
-    property int minBarHeight: Math.max(0, Math.round(numberSetting("minBarHeight", 2)))
-    property int animationDuration: Math.max(120, Math.round(numberSetting("animationDuration", 650)))
-    property int cornerRadius: Math.max(0, Math.round(numberSetting("cornerRadius", 2)))
-    property int probeInterval: Math.max(250, Math.round(numberSetting("probeInterval", 1000)))
-    property real smoothingFactor: Math.max(0.08, Math.min(0.85, numberSetting("smoothingPercent", 28) / 100))
-    property string rawColorMode: stringSetting("colorMode", "vivid")
-    property string colorMode: (root.rawColorMode === "soft" || root.rawColorMode === "mono" || root.rawColorMode === "base") ? "soft" : "vivid"
-    property real fillOverlayOpacity: root.colorMode === "soft" ? 0.22 : 0.24
-    property bool showOverallPercentage: boolSetting("showOverallPercentage", true)
+    // ── Settings (loaded once at startup) ─────────────────────────────
+    property int barWidth: 4
+    property int barGap: 2
+    property int maxVisibleCores: 32
+    property int minBarHeight: 2
+    property int cornerRadius: 2
+    property int probeInterval: 1000
+    property real smoothingFactor: 0.28
+    property string colorMode: "vivid"
+    property real fillOverlayOpacity: 0.24
+    property bool showOverallPercentage: true
 
     // ── State ─────────────────────────────────────────────────────────
-    property var rawCoreUsage: Array.isArray(DgopService.perCoreUsage) ? DgopService.perCoreUsage : []
+    readonly property var rawCoreUsage: {
+        const perCore = DgopService.perCoreCpuUsage;
+        if (Array.isArray(perCore) && perCore.length > 0)
+            return perCore;
+        return [DgopService.cpuUsage || 0];
+    }
     property var animatedCpuUsage: []
-    property bool barHovered: false
-
-    // ── Host detection (DankBar vs desktop widget) ────────────────────
-    readonly property bool isDesktopWidget: root.barConfig === undefined || root.barConfig === null
-    readonly property string axisEdge: root.axis && root.axis.edge ? String(root.axis.edge) : ""
 
     // ── Derived ───────────────────────────────────────────────────────
     readonly property real totalCpuUsage: root.clampUsage(Number(DgopService.cpuUsage || 0))
@@ -44,32 +42,11 @@ PluginComponent {
         return Math.min(root.maxVisibleCores, total);
     }
 
-    // ── Shared helpers ──────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────
     function clampUsage(value) {
         if (Number.isNaN(value))
             return 0;
         return Math.max(0, Math.min(100, value));
-    }
-
-    function numberSetting(key, fallback) {
-        if (pluginData && pluginData[key] !== undefined && pluginData[key] !== null) {
-            const value = Number(pluginData[key]);
-            if (!Number.isNaN(value))
-                return value;
-        }
-        return fallback;
-    }
-
-    function stringSetting(key, fallback) {
-        if (pluginData && pluginData[key] !== undefined && pluginData[key] !== null)
-            return String(pluginData[key]);
-        return fallback;
-    }
-
-    function boolSetting(key, fallback) {
-        if (pluginData && pluginData[key] !== undefined && pluginData[key] !== null)
-            return Boolean(pluginData[key]);
-        return fallback;
     }
 
     function usageFor(index) {
@@ -88,14 +65,10 @@ PluginComponent {
 
     function usageLabel(index) {
         const usage = root.usageFor(index);
-        if (usage >= 90)
-            return "Hottest";
-        if (usage >= 70)
-            return "High";
-        if (usage >= 40)
-            return "Moderate";
-        if (usage >= 10)
-            return "Low";
+        if (usage >= 90) return "Hottest";
+        if (usage >= 70) return "High";
+        if (usage >= 40) return "Moderate";
+        if (usage >= 10) return "Low";
         return "Idle";
     }
 
@@ -135,17 +108,11 @@ PluginComponent {
         root.animatedCpuUsage = next;
     }
 
-    function cpuRatioFor(index) {
-        const usage = root.usageFor(index);
-        return usage / 100;
-    }
-
-    // ── Tooltip / popout ──────────────────────────────────────────────
+    // ── Tooltip / summary ─────────────────────────────────────────────
     function tooltipText() {
         const hottest = root.hottestCoreIndex();
         const hottestUsage = root.usageFor(hottest).toFixed(0);
-        let text = "CPU\nOverall: " + root.totalCpuUsage.toFixed(0) + "%\nHottest: Core " + hottest + " at " + hottestUsage + "%";
-        return text;
+        return "CPU\nOverall: " + root.totalCpuUsage.toFixed(0) + "%\nHottest: Core " + hottest + " at " + hottestUsage + "%";
     }
 
     function shortSummaryText() {
@@ -159,6 +126,16 @@ PluginComponent {
 
     // ── Lifecycle ──────────────────────────────────────────────────────
     Component.onCompleted: {
+        root.barWidth = Math.max(2, Math.round(pluginData["barWidth"] !== undefined ? pluginData["barWidth"] : 4));
+        root.barGap = Math.max(0, Math.round(pluginData["barGap"] !== undefined ? pluginData["barGap"] : 2));
+        root.maxVisibleCores = Math.max(1, Math.round(pluginData["maxVisibleCores"] !== undefined ? pluginData["maxVisibleCores"] : 32));
+        root.minBarHeight = Math.max(0, Math.round(pluginData["minBarHeight"] !== undefined ? pluginData["minBarHeight"] : 2));
+        root.cornerRadius = Math.max(0, Math.round(pluginData["cornerRadius"] !== undefined ? pluginData["cornerRadius"] : 2));
+        root.probeInterval = Math.max(250, Math.min(5000, Math.round(pluginData["probeInterval"] !== undefined ? pluginData["probeInterval"] : 1000)));
+        root.smoothingFactor = Math.max(0.08, Math.min(0.85, ((pluginData["smoothingPercent"] !== undefined ? pluginData["smoothingPercent"] : 28) / 100)));
+        root.colorMode = (pluginData["colorMode"] === "soft") ? "soft" : "vivid";
+        root.fillOverlayOpacity = root.colorMode === "soft" ? 0.22 : 0.24;
+        root.showOverallPercentage = pluginData["showOverallPercentage"] !== false;
         DgopService.addRef(["cpu"]);
         root.syncAnimatedUsage(true);
         DgopService.updateAllStats();
@@ -183,7 +160,7 @@ PluginComponent {
 
     Timer {
         id: animationTimer
-        interval: Math.max(32, root.animationDuration / 16)
+        interval: 16
         running: true
         repeat: true
         onTriggered: {
@@ -191,159 +168,238 @@ PluginComponent {
         }
     }
 
-    // ── Layout ─────────────────────────────────────────────────────────
-    // ── DankBar mode ──────────────────────────────────────────────────
-    Item {
-        visible: !root.isDesktopWidget
-        implicitWidth: horizontalBar.implicitWidth
-        implicitHeight: root.barThickness || 30
+    // ── Horizontal bar pill ───────────────────────────────────────────
+    horizontalBarPill: Component {
+        MouseArea {
+            implicitWidth: hContentRow.implicitWidth + 24
+            implicitHeight: root.barThickness
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton) {
+                    root.pillRightClickAction()
+                } else {
+                    root.pillClickAction()
+                }
+            }
 
-        component horizontalBar: Row {
-            spacing: root.barGap
-            Repeater {
-                model: root.displayedCoreCount
-                delegate: Rectangle {
-                    width: root.barWidth
-                    height: parent.height
-                    radius: root.cornerRadius
-                    color: root.colorFor(index)
-                    opacity: root.fillOverlayOpacity
+            Row {
+                id: hContentRow
+                spacing: root.barGap
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.horizontalCenter: parent.horizontalCenter
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: parent.radius
-                        color: "white"
-                        opacity: 0.15
-                    }
+                Repeater {
+                    model: root.displayedCoreCount
+                    delegate: Rectangle {
+                        width: root.barWidth
+                        height: root.barThickness - 10
+                        radius: root.cornerRadius
+                        color: root.colorFor(index)
+                        opacity: root.fillOverlayOpacity
+                        anchors.verticalCenter: parent.verticalCenter
 
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.bottom: parent.bottom
-                        width: parent.width
-                        height: Math.max(root.minBarHeight, root.animatedCpuUsage[index] / 100 * parent.height)
-                        radius: parent.radius
-                        color: parent.color
-                        opacity: parent.opacity
-
-                        Behavior on height {
-                            NumberAnimation {
-                                duration: root.animationDuration
-                                easing.type: Easing.OutCubic
-                            }
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.bottom: parent.bottom
+                            width: parent.width
+                            height: Math.max(root.minBarHeight, (root.animatedCpuUsage[index] || 0) / 100 * parent.height)
+                            radius: parent.radius
+                            color: parent.color
+                            opacity: 1.0
                         }
                     }
+                }
+
+                StyledText {
+                    visible: root.showOverallPercentage
+                    text: root.totalCpuUsage.toFixed(0) + "%"
+                    color: "#FFFFFF"
+                    font.pixelSize: Theme.fontSizeSmall
+                    font.weight: Font.Bold
+                    anchors.verticalCenter: parent.verticalCenter
+                    leftPadding: root.barGap + 4
                 }
             }
         }
     }
 
-    // ── Desktop widget mode ───────────────────────────────────────────
-    Group {
-        visible: root.isDesktopWidget
-        implicitWidth: 320
-        implicitHeight: 160
+    // ── Vertical bar pill ─────────────────────────────────────────────
+    verticalBarPill: Component {
+        MouseArea {
+            implicitWidth: vContentRow.implicitWidth + 24
+            implicitHeight: root.barThickness
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton) {
+                    root.pillRightClickAction()
+                } else {
+                    root.pillClickAction()
+                }
+            }
 
-        Rectangle {
-            anchors.fill: parent
-            color: Theme.surfaceContainerHigh
-            radius: Theme.cornerRadius
-            border.width: 1
-            border.color: Theme.outline
-            clip: true
+            Row {
+                id: vContentRow
+                spacing: root.barGap
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.horizontalCenter: parent.horizontalCenter
 
-            Column {
-                anchors.fill: parent
-                anchors.margins: Theme.spacingM
-                spacing: Theme.spacingS
+                Repeater {
+                    model: root.displayedCoreCount
+                    delegate: Rectangle {
+                        width: root.barWidth
+                        height: root.barThickness - 10
+                        radius: root.cornerRadius
+                        color: root.colorFor(index)
+                        opacity: root.fillOverlayOpacity
+                        anchors.verticalCenter: parent.verticalCenter
 
-                StyledText {
-                    width: parent.width
-                    text: "CPU Cores"
-                    color: Theme.surfaceText
-                    font.pixelSize: Theme.fontSizeMedium
-                    font.weight: Font.Bold
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.bottom: parent.bottom
+                            width: parent.width
+                            height: Math.max(root.minBarHeight, (root.animatedCpuUsage[index] || 0) / 100 * parent.height)
+                            radius: parent.radius
+                            color: parent.color
+                            opacity: 1.0
+                        }
+                    }
                 }
 
-                Flow {
-                    width: parent.width
-                    height: parent.height - 30
-                    spacing: Theme.spacingS
+                StyledText {
+                    visible: root.showOverallPercentage
+                    text: root.totalCpuUsage.toFixed(0) + "%"
+                    color: "#FFFFFF"
+                    font.pixelSize: Theme.fontSizeSmall
+                    font.weight: Font.Bold
+                    anchors.verticalCenter: parent.verticalCenter
+                    leftPadding: root.barGap + 4
+                }
+            }
+        }
+    }
 
-                    Repeater {
-                        model: root.displayedCoreCount
+    // ── Click actions ─────────────────────────────────────────────────
+    pillClickAction: function() {
+        root.openPopout();
+    }
 
-                        delegate: Rectangle {
-                            width: Math.max(100, (parent.width - Theme.spacingS * 2) / 3)
-                            height: 48
-                            radius: Theme.cornerRadius
-                            color: Theme.surfaceContainerHigh
-                            border.width: 1
-                            border.color: Theme.outline
-                            clip: true
+    pillRightClickAction: function(posX, posY, posWidth, sectionName, currentScreen) {
+        root.openPopout();
+    }
 
-                            // Fill bar
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.bottom: parent.bottom
-                                width: root.cpuRatioFor(index) * parent.width
-                                height: parent.height
-                                radius: parent.radius
-                                color: root.colorFor(index)
-                                opacity: root.fillOverlayOpacity
+    function openPopout() {
+        var popout = null;
+        var pill = null;
+        for (var i = 0; i < root.children.length; i++) {
+            var child = root.children[i];
+            if (typeof child.setTriggerPosition === "function") {
+                popout = child;
+            }
+            if (typeof child.mapToItem === "function" && child.width !== undefined && child.width > 0 && typeof child.setTriggerPosition !== "function") {
+                pill = child;
+            }
+        }
+        if (popout && pill) {
+            var globalPos = pill.mapToItem(null, 0, 0);
+            var screen = root.parentScreen || Screen;
+            var pos = SettingsData.getPopupTriggerPosition(globalPos, screen, root.barThickness, pill.width, 8, 0, null);
+            popout.setTriggerPosition(pos.x, pos.y, pos.width, root.section, screen, 0, root.barThickness, 8, null);
+            popout.toggle();
+        }
+    }
 
-                                Behavior on width {
-                                    NumberAnimation {
-                                        duration: 120
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
-                            }
+    // ── Popout ────────────────────────────────────────────────────────
+    popoutContent: Component {
+        PopoutComponent {
+            id: popout
+            headerText: "CPU Cores"
+            detailsText: "Overall: " + root.totalCpuUsage.toFixed(0) + "%  |  " + root.displayedCoreCount + " cores"
+            showCloseButton: false
 
-                            // Dot indicator
+            Column {
+                width: parent.width
+                anchors.margins: 8
+                anchors.left: parent.left
+                anchors.right: parent.right
+                spacing: Theme.spacingS
+
+                Repeater {
+                    model: root.displayedCoreCount
+
+                    delegate: Rectangle {
+                        property int coreIndex: index
+                        property real coreUsage: root.usageFor(index)
+                        property string coreColor: root.colorFor(index)
+                        property string coreLabel: root.usageLabel(index)
+                        property bool isHottest: index === root.hottestCoreIndex()
+
+                        width: parent.width
+                        height: 40
+                        radius: Theme.cornerRadius
+                        color: Theme.surfaceContainerHigh
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: Math.max(4, (coreUsage / 100) * parent.width)
+                            radius: parent.radius
+                            color: coreColor
+                            opacity: root.fillOverlayOpacity
+                        }
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: Math.max(4, (coreUsage / 100) * parent.width)
+                            radius: parent.radius
+                            color: coreColor
+                            opacity: 0.85
+                        }
+
+                        Row {
+                            anchors.fill: parent
+                            anchors.margins: Theme.spacingS
+                            spacing: Theme.spacingM
+
                             Rectangle {
                                 width: 8
                                 height: 8
                                 radius: 4
-                                color: Theme.widgetTextColor
-                                anchors.left: parent.left
-                                anchors.leftMargin: Theme.spacingM
-                                anchors.top: parent.top
-                                anchors.topMargin: Theme.spacingM
+                                color: coreColor
+                                anchors.verticalCenter: parent.verticalCenter
                             }
 
-                            // Core label
                             StyledText {
-                                anchors.left: parent.left
-                                anchors.leftMargin: Theme.spacingM + 14
-                                anchors.top: parent.top
-                                anchors.topMargin: Theme.spacingS
-                                text: "Core " + index
+                                text: "Core " + coreIndex
                                 color: Theme.surfaceText
                                 font.pixelSize: Theme.fontSizeSmall
-                                font.weight: Font.Medium
+                                font.weight: isHottest ? Font.Bold : Font.Normal
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 60
                             }
 
-                            // Usage percentage
                             StyledText {
-                                anchors.right: parent.right
-                                anchors.rightMargin: Theme.spacingM
-                                anchors.top: parent.top
-                                anchors.topMargin: Theme.spacingS
-                                text: root.usageFor(index).toFixed(0) + "%"
+                                text: coreUsage.toFixed(0) + "%"
                                 color: Theme.surfaceText
                                 font.pixelSize: Theme.fontSizeSmall
                                 font.weight: Font.Bold
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 40
+                                horizontalAlignment: Text.AlignRight
                             }
 
-                            // Usage label
                             StyledText {
-                                anchors.left: parent.left
-                                anchors.leftMargin: Theme.spacingM
-                                anchors.bottom: parent.bottom
-                                anchors.bottomMargin: Theme.spacingS
-                                text: root.usageLabel(index) + (index === root.hottestCoreIndex() ? "  |  hottest" : "")
+                                text: coreLabel + (isHottest ? "  |  hottest" : "")
                                 color: Theme.surfaceVariantText
                                 font.pixelSize: Theme.fontSizeSmall - 1
+                                anchors.verticalCenter: parent.verticalCenter
+                                elide: Text.ElideRight
                             }
                         }
                     }
@@ -351,4 +407,7 @@ PluginComponent {
             }
         }
     }
+
+    popoutWidth: 380
+    popoutHeight: 0
 }
