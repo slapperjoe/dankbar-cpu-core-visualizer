@@ -297,15 +297,18 @@ PluginComponent {
         height: root.isDesktopWidget ? 160 : (root.barConfig ? root.barThickness || 40 : 160)
 
         // Desktop widget wrapper
-        visible: root.isDesktopWidget
-        Rectangle {
+        Item {
+            visible: root.isDesktopWidget
             anchors.fill: parent
-            color: Theme.surfaceContainer
-            radius: Theme.cornerRadius
-            border.width: 1
-            border.color: Theme.outline
 
-            Column {
+            Rectangle {
+                anchors.fill: parent
+                color: Theme.surfaceContainer
+                radius: Theme.cornerRadius
+                border.width: 1
+                border.color: Theme.outline
+
+                Column {
                 anchors.fill: parent
                 anchors.margins: Theme.spacingM
                 spacing: Theme.spacingS
@@ -379,7 +382,10 @@ PluginComponent {
         }
 
         // DankBar widget
-        visible: !root.isDesktopWidget
+        Item {
+            visible: !root.isDesktopWidget
+            anchors.fill: parent
+
         Rectangle {
             anchors.fill: parent
             color: "transparent"
@@ -442,6 +448,7 @@ PluginComponent {
                     }
                 }
             }
+        }
         }
 
         HoverHandler {
