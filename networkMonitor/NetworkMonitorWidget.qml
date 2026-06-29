@@ -231,7 +231,7 @@ PluginComponent {
                     spacing: 0
                     anchors.verticalCenter: parent.verticalCenter
                     Item {
-                        width: Math.ceil(speedMetrics.advanceWidth) + 8
+                        width: Math.ceil(speedMetrics.advanceWidth) + 2
                         height: hDlLabel.implicitHeight
                         StyledText {
                             id: hDlLabel
@@ -243,7 +243,7 @@ PluginComponent {
                         }
                     }
                     Item {
-                        width: Math.ceil(speedMetrics.advanceWidth) + 8
+                        width: Math.ceil(speedMetrics.advanceWidth) + 2
                         height: hUlLabel.implicitHeight
                         StyledText {
                             id: hUlLabel
