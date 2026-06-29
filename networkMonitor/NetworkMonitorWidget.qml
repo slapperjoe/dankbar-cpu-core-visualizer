@@ -130,6 +130,7 @@ PluginComponent {
         property real uploadPeak: 1
         property color downloadColor: "#2DD4FF"
         property color uploadColor: "#FF2D2D"
+        property real graphPadding: 4
         property real strokeWidth: 2
         property bool gridVisible: true
 
@@ -139,6 +140,7 @@ PluginComponent {
         onUploadPeakChanged: requestPaint()
         onDownloadColorChanged: requestPaint()
         onUploadColorChanged: requestPaint()
+        onGraphPaddingChanged: requestPaint()
         onStrokeWidthChanged: requestPaint()
         onGridVisibleChanged: requestPaint()
         onWidthChanged: requestPaint()
@@ -147,18 +149,19 @@ PluginComponent {
         function drawSeries(ctx, series, peak, strokeColor) {
             if (!Array.isArray(series) || series.length <= 0)
                 return;
-            const inset = Math.min(Math.max(strokeWidth / 2, 0.5), Math.min(width, height) / 2);
-            const drawableWidth = Math.max(0, width - inset * 2);
-            const drawableHeight = Math.max(0, height - inset * 2);
+            const hInset = Math.max(strokeWidth / 2, 0.5);
+            const vInset = graphPadding;
+            const drawableWidth = Math.max(0, width - hInset * 2);
+            const drawableHeight = Math.max(0, height - vInset * 2);
             ctx.beginPath();
             ctx.lineWidth = strokeWidth;
             ctx.strokeStyle = strokeColor;
             ctx.lineJoin = "round";
             ctx.lineCap = "round";
             for (let i = 0; i < series.length; i++) {
-                const x = series.length <= 1 ? width / 2 : inset + (i / (series.length - 1)) * drawableWidth;
+                const x = series.length <= 1 ? width / 2 : hInset + (i / (series.length - 1)) * drawableWidth;
                 const ratio = Math.max(0, Math.min(1, Number(series[i] || 0) / Math.max(1, peak)));
-                const y = height - inset - ratio * drawableHeight;
+                const y = height - vInset - ratio * drawableHeight;
                 if (i === 0)
                     ctx.moveTo(x, y);
                 else
@@ -218,8 +221,10 @@ PluginComponent {
 
             Row {
                 id: hContentRow
-                anchors.centerIn: parent
                 spacing: 3
+                y: 7
+                height: Math.max(16, root.barThickness - 14)
+                anchors.horizontalCenter: parent.horizontalCenter
 
                 // Download/Upload stacked on left (fixed width, right-aligned)
                 Column {
@@ -254,7 +259,7 @@ PluginComponent {
                 // Mini chart (fixed width)
                 Rectangle {
                     width: root.chartWidth
-                    height: Math.max(16, root.barThickness - 6)
+                    height: Math.max(16, root.barThickness - 14)
                     anchors.verticalCenter: parent.verticalCenter
                     radius: Math.min(4, height / 2)
                     color: Theme.surfaceContainer
@@ -270,6 +275,7 @@ PluginComponent {
                         downloadColor: root.downloadColor
                         uploadColor: root.uploadColor
                         strokeWidth: Math.max(1, root.lineWidth - 0.5)
+                        graphPadding: 4
                         gridVisible: false
                     }
                 }
@@ -277,6 +283,7 @@ PluginComponent {
         }
     }
 
+    // ── Vertical bar pill ─────────────────────────────────────────────
     verticalBarPill: Component {
         MouseArea {
             hoverEnabled: true
@@ -306,6 +313,7 @@ PluginComponent {
                 Rectangle {
                     width: Math.max(24, root.chartWidth * 0.6)
                     height: Math.max(30, root.barThickness * 1.2)
+                    y: Math.max(0, (parent.height - height) / 2)
                     anchors.horizontalCenter: parent.horizontalCenter
                     radius: Math.min(4, width / 3)
                     color: Theme.surfaceContainer
@@ -313,7 +321,6 @@ PluginComponent {
 
                     NetworkHistoryChart {
                         anchors.fill: parent
-                        anchors.margins: 2
                         downloadSeries: root.downloadHistory
                         uploadSeries: root.uploadHistory
                         downloadPeak: root.downloadPeak
@@ -321,6 +328,7 @@ PluginComponent {
                         downloadColor: root.downloadColor
                         uploadColor: root.uploadColor
                         strokeWidth: Math.max(1, root.lineWidth - 0.5)
+                        graphPadding: 4
                         gridVisible: false
                     }
                 }

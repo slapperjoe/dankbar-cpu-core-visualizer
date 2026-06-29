@@ -64,6 +64,20 @@ install_plugin() {
     local plugin_id="$3"
     local target_dir="$PLUGINS_DIR/$dir_name"
 
+    # Purge ANY stale directories that share this plugin ID (e.g. NetworkMonitor vs networkMonitor)
+    for d in "$PLUGINS_DIR"/*/; do
+        local d_name=$(basename "$d")
+        [[ "$d_name" != "$dir_name" ]] || continue
+        local d_json="$d/plugin.json"
+        if [[ -f "$d_json" ]]; then
+            local d_id=$(grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' "$d_json" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+            if [[ "$d_id" == "$plugin_id" ]]; then
+                rm -rf -- "$d"
+                echo "Purged stale copy: $d (shares plugin ID '$plugin_id')"
+            fi
+        fi
+    done
+
     mkdir -p -- "$target_dir"
     rm -rf -- "$target_dir"
     mkdir -p -- "$target_dir"
@@ -100,6 +114,9 @@ else
         exit 1
     fi
 fi
+
+# Clear QML cache so Quickshell recompiles from fresh source
+rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/quickshell/qmlcache" 2>/dev/null || true
 
 # Restart DMS to pick up plugins
 if command -v dms &>/dev/null; then

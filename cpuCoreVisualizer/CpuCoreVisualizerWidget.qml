@@ -14,6 +14,7 @@ PluginComponent {
     // ── Settings (loaded once at startup) ─────────────────────────────
     property int barWidth: 4
     property int barGap: 2
+    property int barPadding: 4
     property int maxVisibleCores: 32
     property int minBarHeight: 2
     property int cornerRadius: 2
@@ -130,6 +131,7 @@ PluginComponent {
     Component.onCompleted: {
         root.barWidth = Math.max(2, Math.round(pluginData["barWidth"] !== undefined ? pluginData["barWidth"] : 4));
         root.barGap = Math.max(0, Math.round(pluginData["barGap"] !== undefined ? pluginData["barGap"] : 2));
+        root.barPadding = Math.max(0, Math.round(pluginData["barPadding"] !== undefined ? pluginData["barPadding"] : 4));
         root.maxVisibleCores = Math.max(1, Math.round(pluginData["maxVisibleCores"] !== undefined ? pluginData["maxVisibleCores"] : 32));
         root.minBarHeight = Math.max(0, Math.round(pluginData["minBarHeight"] !== undefined ? pluginData["minBarHeight"] : 2));
         root.cornerRadius = Math.max(0, Math.round(pluginData["cornerRadius"] !== undefined ? pluginData["cornerRadius"] : 2));
@@ -214,19 +216,12 @@ PluginComponent {
             implicitHeight: root.barThickness
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) {
-                    root.pillRightClickAction()
-                } else {
-                    root.pillClickAction()
-                }
-            }
 
             Row {
                 id: hContentRow
                 spacing: root.barGap
-                anchors.verticalCenter: parent.verticalCenter
+                y: root.barPadding + 5
+                height: Math.max(root.minBarHeight, root.barThickness - (root.barPadding + 5) * 2)
                 anchors.horizontalCenter: parent.horizontalCenter
 
                 Repeater {
@@ -234,8 +229,7 @@ PluginComponent {
                     delegate: Item {
                         property int _vc: root._colorVersion
                         width: root.barWidth
-                        height: root.barThickness - 10
-                        anchors.verticalCenter: parent.verticalCenter
+                        height: parent.height
 
                         Rectangle {
                             anchors.fill: parent
@@ -264,7 +258,7 @@ PluginComponent {
                         id: hPercentLabel
                         anchors.centerIn: parent
                         text: root.displayCpuUsage.toFixed(0) + "%"
-                        color: "#FFFFFF"
+                        color: Theme.primary
                         font.pixelSize: Theme.fontSizeSmall
                         font.weight: Font.Bold
                     }
@@ -292,48 +286,48 @@ PluginComponent {
             Row {
                 id: vContentRow
                 spacing: root.barGap
-                anchors.verticalCenter: parent.verticalCenter
+                y: root.barPadding
+                height: Math.max(root.minBarHeight, root.barThickness - root.barPadding * 2)
                 anchors.horizontalCenter: parent.horizontalCenter
 
                 Repeater {
-                    model: root.displayedCoreCount
-                    delegate: Item {
-                        property int _vc: root._colorVersion
-                        width: root.barWidth
-                        height: root.barThickness - 10
+                        model: root.displayedCoreCount
+                        delegate: Item {
+                            property int _vc: root._colorVersion
+                            width: root.barWidth
+                            height: parent.height
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: root.cornerRadius
+                                color: { _vc; root.colorFor(index); }
+                                opacity: { _vc; root.fillOverlayOpacity; }
+                            }
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.bottom: parent.bottom
+                                width: parent.width
+                                height: Math.max(root.minBarHeight, (root.animatedCpuUsage[index] || 0) / 100 * parent.height)
+                                radius: root.cornerRadius
+                                color: { _vc; root.colorFor(index); }
+                            }
+                        }
+                    }
+
+                    Item {
+                        visible: root.showOverallPercentage
+                        width: Math.ceil(cpuPercentMetrics.advanceWidth) + 4
+                        height: vPercentLabel.implicitHeight
                         anchors.verticalCenter: parent.verticalCenter
 
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: root.cornerRadius
-                            color: { _vc; root.colorFor(index); }
-                            opacity: { _vc; root.fillOverlayOpacity; }
+                        StyledText {
+                            id: vPercentLabel
+                            anchors.centerIn: parent
+                            text: root.displayCpuUsage.toFixed(0) + "%"
+                            color: Theme.primary
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.weight: Font.Bold
                         }
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.bottom: parent.bottom
-                            width: parent.width
-                            height: Math.max(root.minBarHeight, (root.animatedCpuUsage[index] || 0) / 100 * parent.height)
-                            radius: root.cornerRadius
-                            color: { _vc; root.colorFor(index); }
-                        }
-                    }
-                }
-
-                Item {
-                    visible: root.showOverallPercentage
-                    width: Math.ceil(cpuPercentMetrics.advanceWidth) + 4
-                    height: vPercentLabel.implicitHeight
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    StyledText {
-                        id: vPercentLabel
-                        anchors.centerIn: parent
-                        text: root.displayCpuUsage.toFixed(0) + "%"
-                        color: "#FFFFFF"
-                        font.pixelSize: Theme.fontSizeSmall
-                        font.weight: Font.Bold
-                    }
                 }
             }
         }

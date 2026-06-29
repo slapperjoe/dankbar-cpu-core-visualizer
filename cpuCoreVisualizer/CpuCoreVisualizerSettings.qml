@@ -45,6 +45,16 @@ PluginSettings {
         options: [{ "label": "Vivid", "value": "vivid" }, { "label": "Soft", "value": "soft" }]
     }
 
+    SliderSetting {
+        settingKey: "barPadding"
+        label: "Bar Padding"
+        description: "Top/bottom space between bars and pill edge"
+        defaultValue: 4
+        minimum: 0
+        maximum: 20
+        unit: "px"
+    }
+
     ToggleSetting {
         settingKey: "showOverallPercentage"
         label: "Show Overall Percentage"
