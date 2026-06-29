@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Networking
 import qs.Common
 import qs.Modules.Plugins
 import qs.Services
@@ -9,8 +10,11 @@ PluginComponent {
     id: root
 
     // ── Properties ─────────────────────────────────────────────
+    // ── State properties ─────────────────────────────────────
     property var downloadHistory: []
     property var uploadHistory: []
+    property string networkInterface: ""
+    property string networkIp: ""
     property int probeIntervalMs: 1000
     property string colorMode: "vivid"
     property int chartHeight: 80
@@ -75,6 +79,9 @@ PluginComponent {
             DgopService.updateAllStats();
             root.currentDownloadRate = Math.max(0, Number(DgopService.networkRxRate || 0));
             root.currentUploadRate = Math.max(0, Number(DgopService.networkTxRate || 0));
+            var netInfo = _getNetInfo();
+            root.networkInterface = netInfo[0] || "N/A";
+            root.networkIp = netInfo[1] || "N/A";
             root.appendNetworkHistorySample(root.currentDownloadRate, root.currentUploadRate);
             root._chartRefresh += 1;
         }
@@ -107,6 +114,38 @@ PluginComponent {
         for (let i = 0; i < series.length; i++)
             peak = Math.max(peak, Number(series[i] || 0));
         return peak;
+    }
+
+    function _getNetInfo() {
+        var info = ["N/A", "N/A"];
+        try {
+            var devices = Networking.devices;
+            for (var i = 0; i < devices.count; i++) {
+                var dev = devices.get(i);
+                if (dev && dev.connected) {
+                    info[0] = dev.name;
+                    // For IP, we need to read from filesystem
+                    break;
+                }
+            }
+        } catch (e) {
+            // Networking may not be available
+        }
+        try {
+            var proc = new QProcess();
+            var dev = info[0];
+            if (dev && dev !== "N/A") {
+                proc.execute("ip -4 addr show dev " + dev + " | grep -oP 'inet \\K[0-9.]+");
+                if (proc.exitCode === 0) {
+                    var output = proc.readAll();
+                    if (output.length > 0)
+                        info[1] = String(output).trim();
+                }
+            }
+        } catch (e) {
+            // QProcess not available
+        }
+        return info;
     }
 
     function appendNetworkHistorySample(downloadRate, uploadRate) {
@@ -376,7 +415,6 @@ PluginComponent {
         PopoutComponent {
             id: popout
             headerText: "Network Monitor"
-            detailsText: "↓ " + root.formatFullSpeed(root.currentDownloadRate) + "  |  ↑ " + root.formatFullSpeed(root.currentUploadRate)
             showCloseButton: false
 
             Column {
@@ -386,32 +424,7 @@ PluginComponent {
                 anchors.right: parent.right
                 spacing: Theme.spacingM
 
-                // ── Chart ──────────────────────────────────
-                Rectangle {
-                    width: parent.width
-                    height: root.chartHeight + 8
-                    color: Theme.surfaceContainerHigh
-                    radius: Theme.cornerRadius
-                    border.width: 1
-                    border.color: Theme.outline
-                    clip: true
-
-                    NetworkHistoryChart {
-                        id: popoutChart
-                        anchors.fill: parent
-                        anchors.margins: 4
-                        downloadSeries: root.downloadHistory
-                        uploadSeries: root.uploadHistory
-                        downloadPeak: root.downloadPeak
-                        uploadPeak: root.uploadPeak
-                        downloadColor: root.downloadColor
-                        uploadColor: root.uploadColor
-                        strokeWidth: root.lineWidth
-                        gridVisible: root.showGrid
-                    }
-                }
-
-                // ── Legend ────────────────────────────────
+                // ── Legend (above chart) ─────────────────
                 Row {
                     width: parent.width
                     spacing: Theme.spacingM
@@ -439,10 +452,44 @@ PluginComponent {
                     }
                 }
 
+                // ── Chart ──────────────────────────────────
+                Rectangle {
+                    width: parent.width
+                    height: root.chartHeight + 8
+                    color: Theme.surfaceContainerHigh
+                    radius: Theme.cornerRadius
+                    border.width: 1
+                    border.color: Theme.outline
+                    clip: true
+
+                    NetworkHistoryChart {
+                        id: popoutChart
+                        anchors.fill: parent
+                        anchors.margins: 4
+                        downloadSeries: root.downloadHistory
+                        uploadSeries: root.uploadHistory
+                        downloadPeak: root.downloadPeak
+                        uploadPeak: root.uploadPeak
+                        downloadColor: root.downloadColor
+                        uploadColor: root.uploadColor
+                        strokeWidth: root.lineWidth
+                        gridVisible: root.showGrid
+                    }
+                }
+
                 // ── Peak info ─────────────────────────────
                 StyledText {
                     width: parent.width
                     text: "Peaks (recent): ↓ " + root.formatFullSpeed(root.downloadPeak) + "  |  ↑ " + root.formatFullSpeed(root.uploadPeak)
+                    color: Theme.surfaceVariantText
+                    font.pixelSize: Theme.fontSizeSmall - 1
+                    wrapMode: Text.WordWrap
+                }
+
+                // ── Interface info ─────────────────────────
+                StyledText {
+                    width: parent.width
+                    text: "Interface: " + root.networkInterface + "  |  IP: " + root.networkIp
                     color: Theme.surfaceVariantText
                     font.pixelSize: Theme.fontSizeSmall - 1
                     wrapMode: Text.WordWrap
