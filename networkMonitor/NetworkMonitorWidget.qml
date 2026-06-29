@@ -207,7 +207,7 @@ PluginComponent {
 
     horizontalBarPill: Component {
         MouseArea {
-            implicitWidth: hContentRow.implicitWidth + 24
+            implicitWidth: hContentRow.implicitWidth + 8
             implicitHeight: root.barThickness
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
@@ -221,7 +221,7 @@ PluginComponent {
 
             Row {
                 id: hContentRow
-                spacing: 3
+                spacing: 0
                 y: 7
                 height: Math.max(16, root.barThickness - 14)
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -231,24 +231,24 @@ PluginComponent {
                     spacing: 0
                     anchors.verticalCenter: parent.verticalCenter
                     Item {
-                        width: Math.ceil(speedMetrics.advanceWidth) + 2
+                        width: Math.ceil(speedMetrics.advanceWidth)
                         height: hDlLabel.implicitHeight
                         StyledText {
                             id: hDlLabel
                             anchors.right: parent.right
-                            text: "↓ " + root.formatCompactSpeed(root.currentDownloadRate)
+                            text: root.formatCompactSpeed(root.currentDownloadRate) + " ↓"
                             color: root.downloadColor
                             font.pixelSize: Math.max(8, root.overallTextSize())
                             font.weight: Font.Medium
                         }
                     }
                     Item {
-                        width: Math.ceil(speedMetrics.advanceWidth) + 2
+                        width: Math.ceil(speedMetrics.advanceWidth)
                         height: hUlLabel.implicitHeight
                         StyledText {
                             id: hUlLabel
                             anchors.right: parent.right
-                            text: "↑ " + root.formatCompactSpeed(root.currentUploadRate)
+                            text: root.formatCompactSpeed(root.currentUploadRate) + " ↑"
                             color: root.uploadColor
                             font.pixelSize: Math.max(8, root.overallTextSize())
                             font.weight: Font.Medium
