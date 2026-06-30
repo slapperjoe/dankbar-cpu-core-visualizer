@@ -314,7 +314,7 @@ PluginComponent {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             // Size to fit content + padding
-            implicitWidth: hContentRow.implicitWidth + 24
+            implicitWidth: hContentRow.implicitWidth + 8
             implicitHeight: root.barThickness
 
             onEntered: {
@@ -376,7 +376,7 @@ PluginComponent {
             id: vMouseArea
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            implicitWidth: vContentRow.implicitWidth + 24
+            implicitWidth: vContentRow.implicitWidth + 8
             implicitHeight: root.barThickness
 
             onEntered: {

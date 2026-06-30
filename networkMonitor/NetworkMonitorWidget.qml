@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Io
 
 import qs.Common
 import qs.Modules.Plugins
@@ -79,12 +80,40 @@ PluginComponent {
             DgopService.updateAllStats();
             root.currentDownloadRate = Math.max(0, Number(DgopService.networkRxRate || 0));
             root.currentUploadRate = Math.max(0, Number(DgopService.networkTxRate || 0));
-            var netInfo = _getNetInfo();
-            root.networkInterface = netInfo[0] || "N/A";
-            root.networkIp = netInfo[1] || "N/A";
             root.appendNetworkHistorySample(root.currentDownloadRate, root.currentUploadRate);
             root._chartRefresh += 1;
         }
+    }
+
+    function _fetchNetInfo() {
+        Proc.runCommand("netIf", ["ip", "route"],
+            function(output, exitCode) {
+                if (exitCode !== 0 || !output) return;
+                var lines = output.split("\n");
+                for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i].trim();
+                    if (line.indexOf("default") === 0) {
+                        var parts = line.split(/\s+/);
+                        if (parts.length >= 5) {
+                            var dev = parts[4];
+                            root.networkInterface = dev;
+                            Proc.runCommand("netIp", ["ip", "-4", "addr", "show", "dev", dev],
+                                function(ipOut, ec2) {
+                                    if (ec2 !== 0 || !ipOut) return;
+                                    var ipLines = ipOut.split("\n");
+                                    for (var j = 0; j < ipLines.length; j++) {
+                                        var m = ipLines[j].match(/inet (\d+\.\d+\.\d+\.\d+)/);
+                                        if (m) {
+                                            root.networkIp = m[1];
+                                            return;
+                                        }
+                                    }
+                                }, 50, 5000);
+                        }
+                        return;
+                    }
+                }
+            }, 50, 5000);
     }
 
     // ── Functions ──────────────────────────────────────────────
@@ -114,103 +143,6 @@ PluginComponent {
         for (let i = 0; i < series.length; i++)
             peak = Math.max(peak, Number(series[i] || 0));
         return peak;
-    }
-
-    function _getNetInfo() {
-        var info = ["N/A", "N/A"];
-        // 1. Parse /proc/net/dev to get interface names
-        try {
-            var devContent = "";
-            try {
-                var devFile = new File("/proc/net/dev");
-                devFile.open(File.ReadOnly);
-                devContent = String(devFile.readAll());
-                devFile.close();
-            } catch (e) {
-                return info;
-            }
-            var lines = devContent.split("\n");
-            for (var i = 2; i < lines.length; i++) {
-                var line = lines[i].trim();
-                var colonIdx = line.indexOf(":");
-                if (colonIdx === -1) continue;
-                var iface = line.substring(0, colonIdx).trim();
-                if (iface === "lo") continue;
-                // Check if this interface is up
-                try {
-                    var opFile = new File("/sys/class/net/" + iface + "/operstate");
-                    opFile.open(File.ReadOnly);
-                    var state = String(opFile.readAll()).trim();
-                    opFile.close();
-                    if (state === "up") {
-                        info[0] = iface;
-                        // 2. Get IP via /proc/net/fib_trie
-                        // Read fib_trie and find LOCAL IPs in our subnet
-                        try {
-                            var fibFile = new File("/proc/net/fib_trie");
-                            fibFile.open(File.ReadOnly);
-                            var fibContent = String(fibFile.readAll());
-                            fibFile.close();
-                            var routeFile = new File("/proc/net/route");
-                            routeFile.open(File.ReadOnly);
-                            var routeContent = String(routeFile.readAll());
-                            routeFile.close();
-                            var routeLines = routeContent.split("\n");
-                            var netAddr = null;
-                            var netMask = null;
-                            for (var j = 1; j < routeLines.length; j++) {
-                                var parts = routeLines[j].split("\t");
-                                if (parts[0] === info[0] && parts[2] === "00000000") {
-                                    netAddr = parts[1];
-                                    netMask = parts[7];
-                                    break;
-                                }
-                            }
-                            if (netAddr === null) return info;
-                            var netInt = hexToInt(netAddr);
-                            var maskInt = hexToInt(netMask);
-                            var netPrefix = netInt & maskInt;
-                            // Parse fib_trie: IP and type are on separate lines
-                            var fibLines = fibContent.split("\n");
-                            for (var k = 0; k < fibLines.length; k++) {
-                                var line = fibLines[k].trim();
-                                if (line.indexOf("LOCAL") !== -1) {
-                                    // IP address is on the previous line, starts with |--
-                                    if (k > 0) {
-                                        var prevLine = String(fibLines[k-1]).trim();
-                                        if (prevLine.indexOf("|--") === 0) {
-                                            var ipAddr = prevLine.substring(3).trim().split("/")[0].split(" ")[0];
-                                            var ipInt = ipToInt(ipAddr);
-                                            if ((ipInt & maskInt) === netPrefix) {
-                                                info[1] = ipAddr;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } catch (e) {}
-                        break;
-                    }
-                } catch (e) {}
-            }
-        } catch (e) {}
-        return info;
-    }
-
-    // Helper: hex like "0000A8C0" -> int
-    function hexToInt(hex) {
-        try {
-            return parseInt(String(hex), 16);
-        } catch (e) {
-            return 0;
-        }
-    }
-    // Helper: "192.168.0.146" -> int
-    function ipToInt(ip) {
-        var parts = String(ip).split(".");
-        if (parts.length < 4) return 0;
-        return (parseInt(parts[0]) << 24) | (parseInt(parts[1]) << 16) | (parseInt(parts[2]) << 8) | parseInt(parts[3]);
     }
 
     function appendNetworkHistorySample(downloadRate, uploadRate) {
@@ -310,20 +242,9 @@ PluginComponent {
     }
 
     horizontalBarPill: Component {
-        MouseArea {
-            id: hPillMouse
-            propagateComposedEvents: true
+        Item {
             implicitWidth: hContentRow.implicitWidth + 8
             implicitHeight: root.barThickness
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton)
-                    root.pillRightClickAction();
-                else
-                    root.pillClickAction();
-            }
 
             Row {
                 id: hContentRow
@@ -391,20 +312,9 @@ PluginComponent {
 
     // ── Vertical bar pill ─────────────────────────────────────────────
     verticalBarPill: Component {
-        MouseArea {
-            id: vPillMouse
-            propagateComposedEvents: true
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
+        Item {
             implicitWidth: vContentColumn.implicitWidth + 16
             implicitHeight: root.barThickness
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton)
-                    root.pillRightClickAction();
-                else
-                    root.pillClickAction();
-            }
 
             Column {
                 id: vContentColumn
@@ -462,6 +372,7 @@ PluginComponent {
     }
 
     function openPopout() {
+        root._fetchNetInfo();
         var popout = null;
         var pill = null;
         for (var i = 0; i < root.children.length; i++) {

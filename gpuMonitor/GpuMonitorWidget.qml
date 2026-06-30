@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import qs.Common
 import qs.Modules.Plugins
 import qs.Services
@@ -18,14 +19,18 @@ PluginComponent {
     readonly property var softColors: ["#9ABAEF", "#EF9A9A"]
 
     // ── GPU data ─────────────────────────────────────────────────
+    property var _sysfsGpus: []
     readonly property var gpuList: {
         const list = Array.isArray(DgopService.availableGpus) ? DgopService.availableGpus.slice() : [];
         let out = [];
         for (let i = 0; i < list.length; i++) {
             const g = list[i];
-            if (g && (g.displayName || g.fullName || g.name || g.pciId))
-                out.push(g);
+            if (!g || !(g.displayName || g.fullName || g.name || g.pciId)) continue;
+            const hasData = (Number(g.utilization || 0) > 0) || (Number(g.temperature || 0) > 0);
+            if (hasData) out.push(g);
         }
+        if (out.length === 0 && root._sysfsGpus.length > 0)
+            out = root._sysfsGpus.slice();
         return out;
     }
     readonly property int gpuCount: root.gpuList.length
@@ -99,6 +104,38 @@ PluginComponent {
         return Theme.barTextSize(root.barThickness, fs, mx);
     }
 
+    function _fetchSysfsGpus() {
+        var script = "for card in /sys/class/drm/card[0-9]*/device; do busy=\"$card/gpu_busy_percent\"; [ -f \"$busy\" ] || continue; util=$(cat \"$busy\"); temp=0; for hw in \"$card\"/hwmon/hwmon*; do t=$(cat \"$hw/temp1_input\" 2>/dev/null); [ -n \"$t\" ] && { temp=$t; break; }; done; pci=$(grep -o 'PCI_ID=.*' \"$card/uevent\" 2>/dev/null | cut -d= -f2); driver=$(grep -o 'DRIVER=.*' \"$card/uevent\" 2>/dev/null | cut -d= -f2); pci_addr=$(basename \"$(readlink \"$card\")\"); name=$(lspci -s \"$pci_addr\" 2>/dev/null | sed 's/.*\\[//;s/\\].*//;s/.*\\/ *//'); [ -z \"$name\" ] && name=\"GPU\"; power=0; for hw in \"$card\"/hwmon/hwmon*; do p=$(cat \"$hw/power1_input\" 2>/dev/null); [ -n \"$p\" ] && { power=$p; break; }; done; vram_total=$(cat \"$card/mem_info_vram_total\" 2>/dev/null || echo 0); vram_used=$(cat \"$card/mem_info_vram_used\" 2>/dev/null || echo 0); gtt_total=$(cat \"$card/mem_info_gtt_total\" 2>/dev/null || echo 0); gtt_used=$(cat \"$card/mem_info_gtt_used\" 2>/dev/null || echo 0); echo \"GPU|\"$name\"|\"$driver\"|\"$pci\"|\"$util\"|\"$temp\"|\"$power\"|\"$vram_total\"|\"$vram_used\"|\"$gtt_total\"|\"$gtt_used; done";
+        Proc.runCommand("sysfsGpu", ["sh", "-c", script],
+            function(output, exitCode) {
+                if (exitCode !== 0 || !output) return;
+                var gpus = [];
+                var lines = output.split("\n");
+                for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i].trim();
+                    if (line.indexOf("GPU|") !== 0) continue;
+                    var parts = line.split("|");
+                    if (parts.length < 9) continue;
+                    gpus.push({
+                        displayName: parts[1] || "GPU",
+                        fullName: parts[1] || "",
+                        name: parts[1] || "GPU " + i,
+                        driver: parts[2] || "",
+                        pciId: parts[3] || "",
+                        utilization: parseFloat(parts[4]) || 0,
+                        temperature: Math.round((parseFloat(parts[5]) || 0) / 1000),
+                        power: Math.round((parseFloat(parts[6]) || 0) / 1000000),
+                        vramTotal: parseInt(parts[7]) || 0,
+                        vramUsed: parseInt(parts[8]) || 0,
+                        gttTotal: parseInt(parts[9]) || 0,
+                        gttUsed: parseInt(parts[10]) || 0
+                    });
+                }
+                if (gpus.length > 0)
+                    root._sysfsGpus = gpus;
+            }, 50, 5000);
+    }
+
     // ── Lifecycle ────────────────────────────────────────────────
     Component.onCompleted: {
         root.probeInterval = Math.max(500, Math.min(10000, Math.round(pluginData["probeInterval"] != null ? pluginData["probeInterval"] : 3000)));
@@ -108,6 +145,7 @@ PluginComponent {
         root.targetGpuUsages = [];
         root.syncAnimatedGpuUsage(true);
         DgopService.updateAllStats();
+        root._fetchSysfsGpus();
     }
     Component.onDestruction: {
         probeTimer.stop();
@@ -123,6 +161,8 @@ PluginComponent {
         repeat: true
         onTriggered: {
             DgopService.updateAllStats();
+            if (root.gpuList.length === 0 || (root.gpuList.length > 0 && (Number(root.gpuList[0].utilization || 0)) === 0 && (Number(root.gpuList[0].temperature || 0)) === 0))
+                root._fetchSysfsGpus();
             root.targetGpuUsages = root.gpuList.map(function(g) {
                 var util = Number(g.utilization || 0);
                 if (util > 0) return Math.max(0, Math.min(100, util));
@@ -165,16 +205,10 @@ PluginComponent {
 
     // ── Horizontal bar pill ──────────────────────────────────────
     horizontalBarPill: Component {
-        MouseArea {
-            implicitWidth: Math.max(hContentRow.implicitWidth, Math.ceil(gpuPctMetrics.advanceWidth) + 28) + 24
+        Item {
+            implicitWidth: hContentRow.implicitWidth + 8
             implicitHeight: root.barThickness
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) root.pillRightClickAction();
-                else root.pillClickAction();
-            }
+
             Row {
                 id: hContentRow
                 anchors.verticalCenter: parent.verticalCenter
@@ -184,7 +218,7 @@ PluginComponent {
                     model: root.gpuCount
                     delegate: Rectangle {
                         property int _vc: root._colorVersion
-                        width: 24; height: root.barThickness - 10
+                        width: 18; height: root.barThickness - 18
                         radius: 3
                         color: { _vc; root.colorFor(index); }
                         opacity: 0.85
@@ -221,15 +255,10 @@ PluginComponent {
 
     // ── Vertical bar pill ────────────────────────────────────────
     verticalBarPill: Component {
-        MouseArea {
-            implicitWidth: vContentRow.implicitWidth + 16
+        Item {
+            implicitWidth: vContentRow.implicitWidth + 8
             implicitHeight: root.barThickness
-            hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) root.pillRightClickAction();
-                else root.pillClickAction();
-            }
+
             Row {
                 id: vContentRow
                 anchors.verticalCenter: parent.verticalCenter
@@ -239,7 +268,7 @@ PluginComponent {
                     model: root.gpuCount
                     delegate: Rectangle {
                         property int _vc: root._colorVersion
-                        width: 24; height: root.barThickness - 10
+                        width: 18; height: root.barThickness - 18
                         radius: 3
                         color: { _vc; root.colorFor(index); }
                         opacity: 0.85
@@ -305,7 +334,8 @@ PluginComponent {
                         property real usage: root.gpuUsage(index)
                         property string gpuColor: root.colorFor(index)
                         property real temp: root.gpuTemperature(index)
-                        width: parent.width; height: 52; radius: Theme.cornerRadius
+                        property var gpu: root.gpuList[index]
+                        width: parent.width; height: 66; radius: Theme.cornerRadius
                         color: Theme.surfaceContainerHigh
 
                         Rectangle {
@@ -318,28 +348,53 @@ PluginComponent {
                             anchors.left: parent.left; anchors.bottom: parent.bottom
                             anchors.right: parent.right; height: 2; radius: 1; color: gpuColor
                         }
-                        Row {
+                        Column {
                             anchors.fill: parent; anchors.margins: Theme.spacingS
-                            spacing: Theme.spacingM
-                            StyledText {
-                                text: root.gpuName(index); color: Theme.surfaceText
-                                font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
-                                anchors.verticalCenter: parent.verticalCenter
-                                elide: Text.ElideRight
-                                width: parent.width - 80 - 80 - 3 * Theme.spacingM
+                            spacing: 2
+                            Row {
+                                width: parent.width; spacing: Theme.spacingM
+                                StyledText {
+                                    text: root.gpuName(index); color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    elide: Text.ElideRight
+                                    width: parent.width - 80 - 80 - 3 * Theme.spacingM
+                                }
+                                StyledText {
+                                    text: root.gpuMetricText(index); color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Bold
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 40; horizontalAlignment: Text.AlignRight
+                                }
+                                StyledText {
+                                    text: temp > 0 ? Math.round(temp) + "°C" : "—"
+                                    color: temp >= 80 ? "#FF2D2D" : temp >= 60 ? "#FFD42D" : Theme.surfaceVariantText
+                                    font.pixelSize: Theme.fontSizeSmall - 1
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 36; horizontalAlignment: Text.AlignRight
+                                }
                             }
-                            StyledText {
-                                text: root.gpuMetricText(index); color: Theme.surfaceText
-                                font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Bold
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 40; horizontalAlignment: Text.AlignRight
-                            }
-                            StyledText {
-                                text: temp > 0 ? Math.round(temp) + "°C" : "—"
-                                color: temp >= 80 ? "#FF2D2D" : temp >= 60 ? "#FFD42D" : Theme.surfaceVariantText
-                                font.pixelSize: Theme.fontSizeSmall - 1
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 36; horizontalAlignment: Text.AlignRight
+                            Row {
+                                visible: gpu !== undefined
+                                width: parent.width; spacing: Theme.spacingM
+                                StyledText {
+                                    visible: gpu && gpu.power > 0
+                                    text: gpu ? gpu.power + "W" : ""
+                                    color: Theme.surfaceVariantText
+                                    font.pixelSize: Theme.fontSizeSmall - 2
+                                }
+                                StyledText {
+                                    visible: gpu && gpu.vramTotal > 0
+                                    text: gpu ? "VRAM " + (gpu.vramUsed / 1073741824).toFixed(1) + "/" + (gpu.vramTotal / 1073741824).toFixed(0) + " GB" : ""
+                                    color: Theme.surfaceVariantText
+                                    font.pixelSize: Theme.fontSizeSmall - 2
+                                }
+                                StyledText {
+                                    visible: gpu && gpu.gttTotal > 0
+                                    text: gpu ? "GTT " + (gpu.gttUsed / 1073741824).toFixed(1) + "/" + (gpu.gttTotal / 1073741824).toFixed(0) + " GB" : ""
+                                    color: Theme.surfaceVariantText
+                                    font.pixelSize: Theme.fontSizeSmall - 2
+                                }
                             }
                         }
                     }

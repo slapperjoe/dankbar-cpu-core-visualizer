@@ -211,11 +211,10 @@ PluginComponent {
 
     // ── Horizontal bar pill ───────────────────────────────────────────
     horizontalBarPill: Component {
-        MouseArea {
+        Item {
+            id: hPillMouse
             implicitWidth: hContentRow.implicitWidth + 24
             implicitHeight: root.barThickness
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            hoverEnabled: true
 
             Row {
                 id: hContentRow
@@ -269,19 +268,10 @@ PluginComponent {
 
     // ── Vertical bar pill ─────────────────────────────────────────────
     verticalBarPill: Component {
-        MouseArea {
+        Item {
+            id: vPillMouse
             implicitWidth: vContentRow.implicitWidth + 24
             implicitHeight: root.barThickness
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) {
-                    root.pillRightClickAction()
-                } else {
-                    root.pillClickAction()
-                }
-            }
 
             Row {
                 id: vContentRow
@@ -328,7 +318,7 @@ PluginComponent {
                             font.pixelSize: Theme.fontSizeSmall
                             font.weight: Font.Bold
                         }
-                }
+                    }
             }
         }
     }

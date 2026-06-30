@@ -7,7 +7,7 @@
   "type": "widget",
   "capabilities": ["dankbar-widget", "monitoring", "gpu-visualizer"],
   "component": "./GpuMonitorWidget.qml",
-  "icon": "gpu",
+  "icon": "developer_board",
   "settings": "./GpuMonitorSettings.qml",
   "permissions": ["settings_read", "settings_write"]
 }
