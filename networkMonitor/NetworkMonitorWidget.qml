@@ -241,6 +241,13 @@ PluginComponent {
         text: "888.8M/s"
     }
 
+    TextMetrics {
+        id: compactArrowMetrics
+        font.pixelSize: Math.max(8, root.overallTextSize())
+        font.weight: Font.Medium
+        text: "↑"
+    }
+
     horizontalBarPill: Component {
         Item {
             implicitWidth: hContentRow.implicitWidth + 8
@@ -248,45 +255,45 @@ PluginComponent {
 
             Row {
                 id: hContentRow
-                spacing: 0
-                y: 7
-                height: Math.max(16, root.barThickness - 14)
+                spacing: 2
+                anchors.verticalCenter: parent.verticalCenter
                 anchors.horizontalCenter: parent.horizontalCenter
 
-                // Download/Upload stacked on left (fixed width, right-aligned)
-                Column {
-                    spacing: 0
+                // Download speed + ↓ on left of chart
+                Item {
+                    width: Math.ceil(speedMetrics.advanceWidth)
+                    height: hDlText.implicitHeight
                     anchors.verticalCenter: parent.verticalCenter
-                    Item {
-                        width: Math.ceil(speedMetrics.advanceWidth)
-                        height: hDlLabel.implicitHeight
-                        StyledText {
-                            id: hDlLabel
-                            anchors.right: parent.right
-                            text: root.formatCompactSpeed(root.currentDownloadRate) + " ↓"
-                            color: root.downloadColor
-                            font.pixelSize: Math.max(8, root.overallTextSize())
-                            font.weight: Font.Medium
-                        }
+
+                    StyledText {
+                        id: hDlText
+                        anchors.left: parent.left
+                        anchors.right: hDlArrow.left
+                        anchors.rightMargin: 2
+                        anchors.verticalCenter: parent.verticalCenter
+                        horizontalAlignment: Text.AlignRight
+                        text: root.formatCompactSpeed(root.currentDownloadRate)
+                        color: Theme.widgetTextColor
+                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.weight: Font.Medium
                     }
-                    Item {
-                        width: Math.ceil(speedMetrics.advanceWidth)
-                        height: hUlLabel.implicitHeight
-                        StyledText {
-                            id: hUlLabel
-                            anchors.right: parent.right
-                            text: root.formatCompactSpeed(root.currentUploadRate) + " ↑"
-                            color: root.uploadColor
-                            font.pixelSize: Math.max(8, root.overallTextSize())
-                            font.weight: Font.Medium
-                        }
+
+                    StyledText {
+                        id: hDlArrow
+                        width: Math.ceil(compactArrowMetrics.advanceWidth)
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "↓"
+                        color: root.downloadColor
+                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.weight: Font.Medium
                     }
                 }
 
-                // Mini chart (fixed width)
+                // Mini chart (fixed size, decoupled from bar thickness)
                 Rectangle {
                     width: root.chartWidth
-                    height: Math.max(16, root.barThickness - 14)
+                    height: Math.min(root.barThickness - 6, 20)
                     anchors.verticalCenter: parent.verticalCenter
                     radius: Math.min(4, height / 2)
                     color: Theme.surfaceContainer
@@ -302,8 +309,38 @@ PluginComponent {
                         downloadColor: root.downloadColor
                         uploadColor: root.uploadColor
                         strokeWidth: Math.max(1, root.lineWidth - 0.5)
-                        graphPadding: 4
+                        graphPadding: 1
                         gridVisible: false
+                    }
+                }
+
+                // ↑ + Upload speed on right of chart
+                Item {
+                    width: Math.ceil(speedMetrics.advanceWidth)
+                    height: hUlText.implicitHeight
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    StyledText {
+                        id: hUlArrow
+                        width: Math.ceil(compactArrowMetrics.advanceWidth)
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "↑"
+                        color: root.uploadColor
+                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.weight: Font.Medium
+                    }
+
+                    StyledText {
+                        id: hUlText
+                        anchors.left: hUlArrow.right
+                        anchors.leftMargin: 2
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.formatCompactSpeed(root.currentUploadRate)
+                        color: Theme.widgetTextColor
+                        font.pixelSize: Math.max(8, root.overallTextSize())
+                        font.weight: Font.Medium
                     }
                 }
             }
@@ -331,8 +368,7 @@ PluginComponent {
 
                 Rectangle {
                     width: Math.max(24, root.chartWidth * 0.6)
-                    height: Math.max(30, root.barThickness * 1.2)
-                    y: Math.max(0, (parent.height - height) / 2)
+                    height: Math.min(root.barThickness * 0.8, root.chartWidth * 0.5)
                     anchors.horizontalCenter: parent.horizontalCenter
                     radius: Math.min(4, width / 3)
                     color: Theme.surfaceContainer
@@ -347,7 +383,7 @@ PluginComponent {
                         downloadColor: root.downloadColor
                         uploadColor: root.uploadColor
                         strokeWidth: Math.max(1, root.lineWidth - 0.5)
-                        graphPadding: 4
+                        graphPadding: 1
                         gridVisible: false
                     }
                 }

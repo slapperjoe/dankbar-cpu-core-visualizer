@@ -12,7 +12,10 @@ PluginComponent {
     property int probeInterval: 3000
     property string colorMode: "vivid"
     property int smoothingPercent: 15
-    property int _colorVersion: 0
+    property int barWidth: 7
+    property int barPadding: 4
+    property int minBarHeight: 2
+    property int cornerRadius: 2
 
     // ── Palettes ──────────────────────────────────────────────────
     readonly property var vividColors: ["#2DD4FF", "#FF2D6D"]
@@ -37,7 +40,7 @@ PluginComponent {
     property var animatedGpuUsages: []
     property var targetGpuUsages: []
 
-    readonly property real smoothingFactor: Math.pow(0.5, smoothingPercent / 100.0)
+    readonly property real smoothingFactor: Math.max(0.08, Math.min(0.85, smoothingPercent / 100))
 
     function colorFor(index) {
         const pal = root.colorMode === "vivid" ? root.vividColors : root.softColors;
@@ -141,6 +144,10 @@ PluginComponent {
         root.probeInterval = Math.max(500, Math.min(10000, Math.round(pluginData["probeInterval"] != null ? pluginData["probeInterval"] : 3000)));
         root.colorMode = pluginData["colorMode"] || "vivid";
         root.smoothingPercent = Math.max(1, Math.min(99, Math.round(pluginData["smoothingPercent"] != null ? pluginData["smoothingPercent"] : 15)));
+        root.barWidth = Math.max(2, Math.round(pluginData["barWidth"] !== undefined ? pluginData["barWidth"] : 7));
+        root.barPadding = Math.max(0, Math.round(pluginData["barPadding"] !== undefined ? pluginData["barPadding"] : 4));
+        root.minBarHeight = Math.max(0, Math.round(pluginData["minBarHeight"] !== undefined ? pluginData["minBarHeight"] : 2));
+        root.cornerRadius = Math.max(0, Math.round(pluginData["cornerRadius"] !== undefined ? pluginData["cornerRadius"] : 2));
         DgopService.addRef(["gpu"]);
         root.targetGpuUsages = [];
         root.syncAnimatedGpuUsage(true);
@@ -192,7 +199,10 @@ PluginComponent {
         root.probeInterval = Math.max(500, Math.min(10000, Math.round(pluginData["probeInterval"] != null ? pluginData["probeInterval"] : 3000)));
         root.colorMode = pluginData["colorMode"] || "vivid";
         root.smoothingPercent = Math.max(1, Math.min(99, Math.round(pluginData["smoothingPercent"] != null ? pluginData["smoothingPercent"] : 15)));
-        root._colorVersion += 1;
+        root.barWidth = Math.max(2, Math.round(pluginData["barWidth"] !== undefined ? pluginData["barWidth"] : 7));
+        root.barPadding = Math.max(0, Math.round(pluginData["barPadding"] !== undefined ? pluginData["barPadding"] : 4));
+        root.minBarHeight = Math.max(0, Math.round(pluginData["minBarHeight"] !== undefined ? pluginData["minBarHeight"] : 2));
+        root.cornerRadius = Math.max(0, Math.round(pluginData["cornerRadius"] !== undefined ? pluginData["cornerRadius"] : 2));
     }
 
     // ── TextMetrics ──────────────────────────────────────────────
@@ -206,47 +216,63 @@ PluginComponent {
     // ── Horizontal bar pill ──────────────────────────────────────
     horizontalBarPill: Component {
         Item {
-            implicitWidth: hContentRow.implicitWidth + 8
+            implicitWidth: hContentRow.implicitWidth + 24
             implicitHeight: root.barThickness
 
             Row {
                 id: hContentRow
-                anchors.verticalCenter: parent.verticalCenter
+                spacing: 0
+                y: root.barPadding + 5
+                height: Math.max(root.minBarHeight, root.barThickness - (root.barPadding + 5) * 2)
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 4
-                Repeater {
-                    model: root.gpuCount
-                    delegate: Rectangle {
-                        property int _vc: root._colorVersion
-                        width: 18; height: root.barThickness - 18
-                        radius: 3
-                        color: { _vc; root.colorFor(index); }
-                        opacity: 0.85
-                        anchors.verticalCenter: parent.verticalCenter
-                        Rectangle {
-                            anchors.left: parent.left; anchors.bottom: parent.bottom
-                            width: parent.width
-                            height: Math.max(2, (root.animatedGpuUsages[index] || 0) / 100 * parent.height)
-                            radius: parent.radius; color: parent.color
+
+                Rectangle {
+                    width: root.barWidth
+                    height: parent.height
+                    visible: root.gpuCount > 0
+                    radius: root.cornerRadius
+                    color: "#000000"
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.bottom: parent.bottom
+                        width: parent.width
+                        height: Math.max(root.minBarHeight, (root.animatedGpuUsages[0] || 0) / 100 * parent.height)
+                        radius: root.cornerRadius
+                        color: root.colorFor(0)
+
+                        Behavior on height {
+                            NumberAnimation {
+                                duration: 120
+                                easing.type: Easing.OutCubic
+                            }
                         }
                     }
                 }
+
                 Item {
                     visible: root.gpuCount > 0
                     width: Math.ceil(gpuPctMetrics.advanceWidth) + 4
                     height: hGpuLabel.implicitHeight
                     anchors.verticalCenter: parent.verticalCenter
+
                     StyledText {
-                        id: hGpuLabel; anchors.centerIn: parent
+                        id: hGpuLabel
+                        anchors.centerIn: parent
                         text: root.gpuMetricText(0)
-                        color: "#FFFFFF"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Bold
+                        color: Theme.widgetTextColor
+                        font.pixelSize: root.overallTextSize()
+                        font.weight: Font.Bold
                     }
                 }
+
                 StyledText {
-                    visible: root.gpuCount === 0; text: "—"
-                    width: Math.ceil(gpuPctMetrics.advanceWidth) + 28
+                    visible: root.gpuCount === 0
+                    text: "—"
+                    width: Math.ceil(gpuPctMetrics.advanceWidth) + 4
                     color: Theme.widgetTextColor
-                    font.pixelSize: Math.max(8, root.overallTextSize()); font.weight: Font.Medium
+                    font.pixelSize: root.overallTextSize()
+                    font.weight: Font.Medium
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -256,42 +282,56 @@ PluginComponent {
     // ── Vertical bar pill ────────────────────────────────────────
     verticalBarPill: Component {
         Item {
-            implicitWidth: vContentRow.implicitWidth + 8
+            implicitWidth: vContentRow.implicitWidth + 24
             implicitHeight: root.barThickness
 
             Row {
                 id: vContentRow
-                anchors.verticalCenter: parent.verticalCenter
+                spacing: 0
+                y: root.barPadding
+                height: Math.max(root.minBarHeight, root.barThickness - root.barPadding * 2)
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 4
-                Repeater {
-                    model: root.gpuCount
-                    delegate: Rectangle {
-                        property int _vc: root._colorVersion
-                        width: 18; height: root.barThickness - 18
-                        radius: 3
-                        color: { _vc; root.colorFor(index); }
-                        opacity: 0.85
-                        anchors.verticalCenter: parent.verticalCenter
-                        Rectangle {
-                            anchors.left: parent.left; anchors.bottom: parent.bottom
-                            width: parent.width
-                            height: Math.max(2, (root.animatedGpuUsages[index] || 0) / 100 * parent.height)
-                            radius: parent.radius; color: parent.color
+
+                Rectangle {
+                    width: root.barWidth
+                    height: parent.height
+                    visible: root.gpuCount > 0
+                    radius: root.cornerRadius
+                    color: "#000000"
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.bottom: parent.bottom
+                        width: parent.width
+                        height: Math.max(root.minBarHeight, (root.animatedGpuUsages[0] || 0) / 100 * parent.height)
+                        radius: root.cornerRadius
+                        color: root.colorFor(0)
+
+                        Behavior on height {
+                            NumberAnimation {
+                                duration: 120
+                                easing.type: Easing.OutCubic
+                            }
                         }
                     }
                 }
+
                 StyledText {
                     visible: root.gpuCount > 0
                     text: root.gpuMetricText(0)
-                    color: "#FFFFFF"; font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Bold
+                    color: Theme.widgetTextColor
+                    font.pixelSize: root.overallTextSize()
+                    font.weight: Font.Bold
                     anchors.verticalCenter: parent.verticalCenter
                 }
+
                 StyledText {
-                    visible: root.gpuCount === 0; text: "—"
-                    width: Math.ceil(gpuPctMetrics.advanceWidth) + 28
+                    visible: root.gpuCount === 0
+                    text: "—"
+                    width: Math.ceil(gpuPctMetrics.advanceWidth) + 4
                     color: Theme.widgetTextColor
-                    font.pixelSize: Math.max(7, root.overallTextSize() - 1); font.weight: Font.Medium
+                    font.pixelSize: root.overallTextSize()
+                    font.weight: Font.Medium
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }

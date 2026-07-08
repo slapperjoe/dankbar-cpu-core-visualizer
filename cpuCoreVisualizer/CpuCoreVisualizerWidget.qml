@@ -51,6 +51,12 @@ PluginComponent {
         return Math.max(0, Math.min(100, value));
     }
 
+    function overallTextSize() {
+        const fs = root.barConfig ? root.barConfig.fontScale : undefined;
+        const mx = root.barConfig ? root.barConfig.maximizeWidgetText : undefined;
+        return Theme.barTextSize(root.barThickness, fs, mx);
+    }
+
     function usageFor(index) {
         if (index < 0 || index >= root.rawCoreUsage.length)
             return 0;
@@ -113,18 +119,45 @@ PluginComponent {
 
     // ── Tooltip / summary ─────────────────────────────────────────────
     function tooltipText() {
-        const hottest = root.hottestCoreIndex();
-        const hottestUsage = root.usageFor(hottest).toFixed(0);
-        return "CPU\nOverall: " + root.displayCpuUsage.toFixed(0) + "%\nHottest: Core " + hottest + " at " + hottestUsage + "%";
+        const totalUsage = root.totalCpuUsage.toFixed(1);
+        const totalCores = root.rawCoreUsage.length;
+        const shownCores = root.displayedCoreCount;
+        const hottestIndex = root.hottestCoreIndex();
+        const hottestUsage = root.usageFor(hottestIndex).toFixed(0);
+        let header = "CPU " + totalUsage + "%";
+        if (DgopService.cpuTemperature > 0)
+            header += "  |  " + Math.round(DgopService.cpuTemperature) + "C";
+        if (DgopService.cpuFrequency > 0)
+            header += "  |  " + Math.round(DgopService.cpuFrequency) + " MHz";
+
+        let summary = "Hottest core C" + hottestIndex + " " + hottestUsage + "%";
+        if (shownCores < totalCores)
+            summary += "  |  Showing " + shownCores + "/" + totalCores + " cores";
+        else
+            summary += "  |  " + totalCores + " cores";
+        let lines = [];
+        for (let i = 0; i < shownCores; i++) {
+            const entry = "C" + i + " " + root.usageFor(i).toFixed(0) + "%";
+            const lineIndex = Math.floor(i / 4);
+            if (!lines[lineIndex])
+                lines[lineIndex] = entry;
+            else
+                lines[lineIndex] += "   " + entry;
+        }
+        return header + "\n" + summary + (lines.length > 0 ? "\n" + lines.join("\n") : "");
     }
 
     function shortSummaryText() {
-        let parts = ["CPU"];
-        for (let i = 0; i < root.displayedCoreCount; i++) {
-            const usage = root.usageFor(i);
-            parts.push("C" + i + ": " + usage.toFixed(0) + "%");
-        }
-        return parts.join("  |  ");
+        const totalUsage = root.totalCpuUsage.toFixed(1);
+        const hottestIndex = root.hottestCoreIndex();
+        const hottestUsage = root.usageFor(hottestIndex).toFixed(0);
+        let summary = "Total " + totalUsage + "%";
+        summary += "  |  Hot core C" + hottestIndex + " " + hottestUsage + "%";
+        if (DgopService.cpuTemperature > 0)
+            summary += "  |  " + Math.round(DgopService.cpuTemperature) + "°C";
+        if (DgopService.cpuFrequency > 0)
+            summary += "  |  " + Math.round(DgopService.cpuFrequency) + " MHz";
+        return summary;
     }
 
     // ── Lifecycle ──────────────────────────────────────────────────────
@@ -243,6 +276,13 @@ PluginComponent {
                             height: Math.max(root.minBarHeight, (root.animatedCpuUsage[index] || 0) / 100 * parent.height)
                             radius: root.cornerRadius
                             color: { _vc; root.colorFor(index); }
+
+                            Behavior on height {
+                                NumberAnimation {
+                                    duration: 120
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
                         }
                     }
                 }
@@ -256,9 +296,9 @@ PluginComponent {
                     StyledText {
                         id: hPercentLabel
                         anchors.centerIn: parent
-                        text: root.displayCpuUsage.toFixed(0) + "%"
-                        color: Theme.primary
-                        font.pixelSize: Theme.fontSizeSmall
+                        text: root.displayCpuUsage.toFixed(1) + "%"
+                        color: Theme.widgetTextColor
+                        font.pixelSize: root.overallTextSize()
                         font.weight: Font.Bold
                     }
                 }
@@ -300,6 +340,13 @@ PluginComponent {
                                 height: Math.max(root.minBarHeight, (root.animatedCpuUsage[index] || 0) / 100 * parent.height)
                                 radius: root.cornerRadius
                                 color: { _vc; root.colorFor(index); }
+
+                                Behavior on height {
+                                    NumberAnimation {
+                                        duration: 120
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
                             }
                         }
                     }
@@ -313,9 +360,9 @@ PluginComponent {
                         StyledText {
                             id: vPercentLabel
                             anchors.centerIn: parent
-                            text: root.displayCpuUsage.toFixed(0) + "%"
+                            text: root.displayCpuUsage.toFixed(1) + "%"
                             color: Theme.primary
-                            font.pixelSize: Theme.fontSizeSmall
+                            font.pixelSize: root.overallTextSize()
                             font.weight: Font.Bold
                         }
                     }
@@ -362,8 +409,15 @@ PluginComponent {
     popoutContent: Component {
         PopoutComponent {
             id: popout
-            headerText: "CPU Cores"
-            detailsText: "Overall: " + root.displayCpuUsage.toFixed(0) + "%  |  " + root.displayedCoreCount + " cores"
+            headerText: {
+                let text = "CPU Cores";
+                if (DgopService.cpuTemperature > 0)
+                    text += "  |  " + Math.round(DgopService.cpuTemperature) + "°C";
+                if (DgopService.cpuFrequency > 0)
+                    text += "  |  " + Math.round(DgopService.cpuFrequency) + " MHz";
+                return text;
+            }
+            detailsText: "Overall: " + root.displayCpuUsage.toFixed(1) + "%  |  " + root.displayedCoreCount + " cores"
             showCloseButton: false
 
             Flow {
@@ -386,9 +440,12 @@ PluginComponent {
                         property real cellWidth: Math.max(100, (parent.width - Theme.spacingS * (root.popoutColumns - 1)) / root.popoutColumns)
 
                         width: cellWidth
-                        height: 44
+                        height: 52
                         radius: Theme.cornerRadius
                         color: Theme.surfaceContainerHigh
+                        border.width: 1
+                        border.color: Theme.outline
+                        clip: true
 
                         // Background fill bar
                         Rectangle {
@@ -399,6 +456,13 @@ PluginComponent {
                             radius: parent.radius
                             color: coreColor
                             opacity: { _vc; root.fillOverlayOpacity; }
+
+                            Behavior on width {
+                                NumberAnimation {
+                                    duration: 120
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
                         }
 
                         // Active indicator bar at bottom
@@ -411,37 +475,38 @@ PluginComponent {
                             color: coreColor
                         }
 
-                        Row {
+                        Column {
                             anchors.fill: parent
                             anchors.margins: Theme.spacingS
-                            spacing: Theme.spacingS
+                            spacing: 2
 
-                            StyledText {
-                                text: "C" + coreIndex
-                                color: Theme.surfaceText
-                                font.pixelSize: Theme.fontSizeSmall
-                                font.weight: isHottest ? Font.Bold : Font.Normal
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 28
+                            Row {
+                                spacing: Theme.spacingS
+
+                                StyledText {
+                                    text: "C" + coreIndex
+                                    color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: isHottest ? Font.Bold : Font.Normal
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                StyledText {
+                                    text: coreUsage.toFixed(1) + "%"
+                                    color: Theme.surfaceText
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: Font.Bold
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    horizontalAlignment: Text.AlignRight
+                                }
                             }
 
                             StyledText {
-                                text: coreUsage.toFixed(0) + "%"
-                                color: Theme.surfaceText
-                                font.pixelSize: Theme.fontSizeSmall
-                                font.weight: Font.Bold
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 32
-                                horizontalAlignment: Text.AlignRight
-                            }
-
-                            StyledText {
-                                text: coreLabel + (isHottest ? "" : "")
+                                text: coreLabel + (isHottest ? "  |  hottest" : "")
                                 color: isHottest ? coreColor : Theme.surfaceVariantText
                                 font.pixelSize: Theme.fontSizeSmall - 1
-                                anchors.verticalCenter: parent.verticalCenter
                                 elide: Text.ElideRight
-                                width: cellWidth - 28 - 32 - 3 * Theme.spacingS
+                                width: cellWidth - Theme.spacingS * 2
                             }
                         }
                     }

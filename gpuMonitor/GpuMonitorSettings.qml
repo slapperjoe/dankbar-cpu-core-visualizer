@@ -9,9 +9,10 @@ PluginSettings {
 
     property int _v: 0
 
-    function setProbeInterval(ms) { pluginData["probeInterval"] = ms; _v += 1; }
-    function setSmoothing(pct) { pluginData["smoothingPercent"] = pct; _v += 1; }
-    function toggleColorMode() { pluginData["colorMode"] = pluginData["colorMode"] === "soft" ? "vivid" : "soft"; _v += 1; }
+    function setProbeInterval(ms) { pluginData["probeInterval"] = ms; saveValue("probeInterval", ms); _v += 1; }
+    function setSmoothing(pct) { pluginData["smoothingPercent"] = pct; saveValue("smoothingPercent", pct); _v += 1; }
+    function setBarWidth(w) { pluginData["barWidth"] = w; saveValue("barWidth", w); _v += 1; }
+    function toggleColorMode() { var m = pluginData["colorMode"] === "soft" ? "vivid" : "soft"; pluginData["colorMode"] = m; saveValue("colorMode", m); _v += 1; }
     function isActive(key, value, fallbackValue) {
         _v;
         var stored = pluginData[key];
@@ -90,4 +91,29 @@ PluginSettings {
         }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.toggleColorMode() }
     }
+
+    StyledText {
+        width: parent.width; text: "Bar Width"
+        font.pixelSize: Theme.fontSizeMedium; font.weight: Font.Medium; color: Theme.surfaceText; topPadding: Theme.spacingM
+    }
+    Row {
+        width: parent.width; spacing: Theme.spacingS
+        Repeater {
+            model: [3, 5, 7, 9, 11, 14]
+            delegate: Rectangle {
+                property int wValue: modelData
+                width: (parent.width - 5 * Theme.spacingS) / 6; height: 36; radius: Theme.cornerRadius
+                color: root.isActive("barWidth", wValue, 7) ? Theme.primary : Theme.surfaceContainerHigh
+                border.width: 1; border.color: Theme.outline
+                StyledText {
+                    anchors.centerIn: parent; text: wValue + "px"
+                    color: root.isActive("barWidth", wValue, 4) ? Theme.surfaceContainerHigh : Theme.surfaceText
+                    font.pixelSize: Theme.fontSizeSmall; font.weight: Font.Medium
+                }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setBarWidth(wValue) }
+            }
+        }
+    }
+
+
 }
