@@ -134,8 +134,16 @@ PluginComponent {
                         gttUsed: parseInt(parts[10]) || 0
                     });
                 }
-                if (gpus.length > 0)
+                if (gpus.length > 0) {
                     root._sysfsGpus = gpus;
+                    root.targetGpuUsages = root.gpuList.map(function(g) {
+                        var util = Number(g.utilization || 0);
+                        if (util > 0) return Math.max(0, Math.min(100, util));
+                        var temp = Number(g.temperature || 0);
+                        if (temp > 0) return Math.max(0, Math.min(100, temp));
+                        return 0;
+                    });
+                }
             }, 50, 5000);
     }
 
@@ -168,16 +176,21 @@ PluginComponent {
         repeat: true
         onTriggered: {
             DgopService.updateAllStats();
-            if (root.gpuList.length === 0 || (root.gpuList.length > 0 && (Number(root.gpuList[0].utilization || 0)) === 0 && (Number(root.gpuList[0].temperature || 0)) === 0))
-                root._fetchSysfsGpus();
-            root.targetGpuUsages = root.gpuList.map(function(g) {
-                var util = Number(g.utilization || 0);
-                if (util > 0) return Math.max(0, Math.min(100, util));
-                var temp = Number(g.temperature || 0);
-                if (temp > 0) return Math.max(0, Math.min(100, temp));
-                return 0;
-            });
-            root.syncAnimatedGpuUsage(false);
+            root._fetchSysfsGpus();
+            var dgopGpus = DgopService.availableGpus;
+            if (Array.isArray(dgopGpus) && dgopGpus.length > 0) {
+                var hasData = dgopGpus.some(function(g) { return Number(g.utilization || 0) > 0 || Number(g.temperature || 0) > 0; });
+                if (hasData) {
+                    root.targetGpuUsages = root.gpuList.map(function(g) {
+                        var util = Number(g.utilization || 0);
+                        if (util > 0) return Math.max(0, Math.min(100, util));
+                        var temp = Number(g.temperature || 0);
+                        if (temp > 0) return Math.max(0, Math.min(100, temp));
+                        return 0;
+                    });
+                    root.syncAnimatedGpuUsage(false);
+                }
+            }
         }
     }
     Timer {

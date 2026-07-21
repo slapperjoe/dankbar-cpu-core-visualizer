@@ -1,0 +1,16 @@
+{
+    "id": "quickActions",
+    "name": "Quick Actions",
+    "description": "Quick actions panel with display rotation and more",
+    "version": "1.0.1",
+    "author": "Mark + Copilot",
+    "type": "widget",
+    "capabilities": ["dankbar-widget", "quick-actions", "display-rotation"],
+    "component": "./QuickActionsWidget.qml",
+    "icon": "bolt",
+    "settings": "./QuickActionsSettings.qml",
+    "permissions": [
+        "settings_read",
+        "settings_write"
+    ]
+}

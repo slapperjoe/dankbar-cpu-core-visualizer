@@ -12,6 +12,7 @@ PLUGINS=(
     "Disk Monitor|diskMonitor|diskMonitor"
     "Network Monitor|networkMonitor|networkMonitor"
     "Audio Switcher|audioSwitcher|audioSwitcher"
+    "Quick Actions|quickActions|quickActions"
 )
 
 usage() {
@@ -110,7 +111,7 @@ else
     done
     if [[ "$found" == "false" ]]; then
         echo "error: unknown plugin ID '$INSTALL_PLUGIN'" >&2
-        echo "Available: cpuCoreVisualizer gpuMonitor memoryMonitor diskMonitor networkMonitor audioSwitcher" >&2
+        echo "Available: cpuCoreVisualizer gpuMonitor memoryMonitor diskMonitor networkMonitor audioSwitcher quickActions" >&2
         exit 1
     fi
 fi
@@ -132,7 +133,8 @@ Installed successfully. Next steps in DankMaterialShell:
   4. Add their IDs to your DankBar widget list:
 
      cpuCoreVisualizer  gpuMonitor  memoryMonitor
-     diskMonitor        networkMonitor  audioSwitcher
+      diskMonitor        networkMonitor  audioSwitcher
+      quickActions
 
 Each plugin also supports niri desktop widgets (DMS will host them automatically).
 EOF

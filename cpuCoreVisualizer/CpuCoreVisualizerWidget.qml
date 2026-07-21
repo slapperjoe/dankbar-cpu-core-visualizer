@@ -225,6 +225,7 @@ PluginComponent {
             if (typeof root.loadValue === "function") return root.loadValue(key, def);
             return def;
         };
+        root.barWidth = Math.max(2, Math.round(p("barWidth", 4)));
         root.probeInterval = Math.max(250, Math.min(5000, Math.round(p("probeInterval", 1000))));
         root.smoothingFactor = Math.max(0.08, Math.min(0.85, (p("smoothingPercent", 28) / 100)));
         root.colorMode = (p("colorMode", "vivid") === "soft") ? "soft" : "vivid";

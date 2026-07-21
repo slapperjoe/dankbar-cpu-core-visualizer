@@ -46,11 +46,11 @@ PluginSettings {
     }
 
     SliderSetting {
-        settingKey: "barPadding"
-        label: "Bar Padding"
-        description: "Top/bottom space between bars and pill edge"
+        settingKey: "barWidth"
+        label: "Bar Width"
+        description: "Width of each CPU core bar"
         defaultValue: 4
-        minimum: 0
+        minimum: 2
         maximum: 20
         unit: "px"
     }
