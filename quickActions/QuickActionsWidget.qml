@@ -11,6 +11,8 @@ PluginComponent {
     property string selectedDisplay: "auto"
     property var connectedDisplays: []
     property string currentRotation: "normal"
+    property bool lidSleepEnabled: true
+    property int lidInhibitorPid: 0
 
     function fetchDisplays() {
         Proc.runCommand("displays", ["sh", "-c", "niri msg --json outputs 2>/dev/null"],
@@ -94,8 +96,62 @@ PluginComponent {
         root.rotateDisplay("180");
     }
 
+    function enableLidSleep() {
+        if (root.lidInhibitorPid > 0) {
+            Proc.runCommand("uninhibit_lid", ["sh", "-c", "kill " + root.lidInhibitorPid + " 2>/dev/null"]);
+            root.lidInhibitorPid = 0;
+        }
+        root.lidSleepEnabled = true;
+        pluginService.savePluginData("quickActions", "lidSleepEnabled", true);
+        ToastService.success("Lid sleep", "Lid sleep enabled");
+    }
+
+    function disableLidSleep() {
+        Proc.runCommand("inhibit_lid", ["sh", "-c", "systemd-inhibit --what=handle-lid-switch --who='DankBar QuickActions' --why='User disabled lid sleep' sleep infinity & echo $!"],
+            function(output, exitCode) {
+                if (exitCode !== 0 || !output) {
+                    ToastService.error("Failed", "Could not disable lid sleep. Is systemd-inhibit available?");
+                    root.lidSleepEnabled = true;
+                    pluginService.savePluginData("quickActions", "lidSleepEnabled", true);
+                    return;
+                }
+                root.lidInhibitorPid = parseInt(output);
+                if (!root.lidInhibitorPid || root.lidInhibitorPid <= 0) {
+                    ToastService.error("Failed", "Invalid inhibitor PID: " + output);
+                    root.lidSleepEnabled = true;
+                    pluginService.savePluginData("quickActions", "lidSleepEnabled", true);
+                    return;
+                }
+            });
+        root.lidSleepEnabled = false;
+        pluginService.savePluginData("quickActions", "lidSleepEnabled", false);
+        ToastService.success("Lid sleep", "Lid sleep disabled — laptop stays awake on lid close");
+    }
+
+    function toggleLidSleep() {
+        if (root.lidSleepEnabled) {
+            root.disableLidSleep();
+        } else {
+            root.enableLidSleep();
+        }
+    }
+
+    function restoreLidInhibitor() {
+        if (root.lidInhibitorPid > 0) return;
+        Proc.runCommand("inhibit_lid_restore", ["sh", "-c", "systemd-inhibit --what=handle-lid-switch --who='DankBar QuickActions' --why='User disabled lid sleep' sleep infinity & echo $!"],
+            function(output, exitCode) {
+                if (exitCode === 0 && output) {
+                    var pid = parseInt(output);
+                    if (pid > 0) root.lidInhibitorPid = pid;
+                }
+            });
+    }
+
     Component.onCompleted: {
         root.selectedDisplay = pluginData["selectedDisplay"] || "auto";
+        var savedLidState = pluginData["lidSleepEnabled"];
+        root.lidSleepEnabled = savedLidState !== undefined ? savedLidState : true;
+        if (!root.lidSleepEnabled) root.restoreLidInhibitor();
         root.fetchDisplays();
     }
 
@@ -112,6 +168,8 @@ PluginComponent {
 
     function reloadSettings() {
         root.selectedDisplay = pluginData["selectedDisplay"] || "auto";
+        var savedLidState = pluginData["lidSleepEnabled"];
+        if (savedLidState !== undefined) root.lidSleepEnabled = savedLidState;
     }
 
     horizontalBarPill: Component {
@@ -136,7 +194,7 @@ PluginComponent {
                 DankIcon {
                     name: "bolt"
                     size: Theme.iconSize - 6
-                    color: "#FFFFFF"
+                    color: Theme.widgetTextColor
                     filled: true
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -166,7 +224,7 @@ PluginComponent {
                 DankIcon {
                     name: "bolt"
                     size: Theme.iconSize - 6
-                    color: "#FFFFFF"
+                    color: Theme.widgetTextColor
                     filled: true
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -383,6 +441,64 @@ PluginComponent {
                             color: Theme.surfaceVariantText
                             font.pixelSize: Theme.fontSizeSmall - 1
                             anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+                }
+
+                // ── Lid Sleep Toggle ─────────────────────
+                StyledText {
+                    text: "Lid Sleep"
+                    color: Theme.surfaceText
+                    font.pixelSize: Theme.fontSizeSmall
+                    font.weight: Font.Medium
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 56
+                    radius: Theme.cornerRadius
+                    color: Theme.surfaceContainerHigh
+
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: Theme.spacingM
+                        spacing: Theme.spacingS
+
+                        DankIcon {
+                            name: "laptop"
+                            size: 24
+                            color: root.lidSleepEnabled ? Theme.primary : "#FF5252"
+                            filled: true
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        StyledText {
+                            text: "Lid Sleep"
+                            color: Theme.surfaceText
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.weight: Font.Medium
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    StyledText {
+                        text: root.lidSleepEnabled ? "ON" : "OFF"
+                        color: root.lidSleepEnabled ? "#4CAF50" : "#FF5252"
+                        font.pixelSize: Theme.fontSizeSmall
+                        font.weight: Font.Bold
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.spacingM
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.toggleLidSleep();
+                            popout.closePopout();
                         }
                     }
                 }

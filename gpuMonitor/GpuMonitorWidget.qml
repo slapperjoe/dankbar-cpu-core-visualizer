@@ -108,7 +108,7 @@ PluginComponent {
     }
 
     function _fetchSysfsGpus() {
-        var script = "for card in /sys/class/drm/card[0-9]*/device; do busy=\"$card/gpu_busy_percent\"; [ -f \"$busy\" ] || continue; util=$(cat \"$busy\"); temp=0; for hw in \"$card\"/hwmon/hwmon*; do t=$(cat \"$hw/temp1_input\" 2>/dev/null); [ -n \"$t\" ] && { temp=$t; break; }; done; pci=$(grep -o 'PCI_ID=.*' \"$card/uevent\" 2>/dev/null | cut -d= -f2); driver=$(grep -o 'DRIVER=.*' \"$card/uevent\" 2>/dev/null | cut -d= -f2); pci_addr=$(basename \"$(readlink \"$card\")\"); name=$(lspci -s \"$pci_addr\" 2>/dev/null | sed 's/.*\\[//;s/\\].*//;s/.*\\/ *//'); [ -z \"$name\" ] && name=\"GPU\"; power=0; for hw in \"$card\"/hwmon/hwmon*; do p=$(cat \"$hw/power1_input\" 2>/dev/null); [ -n \"$p\" ] && { power=$p; break; }; done; vram_total=$(cat \"$card/mem_info_vram_total\" 2>/dev/null || echo 0); vram_used=$(cat \"$card/mem_info_vram_used\" 2>/dev/null || echo 0); gtt_total=$(cat \"$card/mem_info_gtt_total\" 2>/dev/null || echo 0); gtt_used=$(cat \"$card/mem_info_gtt_used\" 2>/dev/null || echo 0); echo \"GPU|\"$name\"|\"$driver\"|\"$pci\"|\"$util\"|\"$temp\"|\"$power\"|\"$vram_total\"|\"$vram_used\"|\"$gtt_total\"|\"$gtt_used; done";
+        var script = "for card in /sys/class/drm/card[0-9]*/device; do pci_addr=$(basename \"$(readlink \"$card\")\"); driver=$(grep -o 'DRIVER=.*' \"$card/uevent\" 2>/dev/null | cut -d= -f2); [ -z \"$driver\" ] && continue; name=$(lspci -s \"$pci_addr\" 2>/dev/null | sed 's/^[^:]*: //; s/\\[//g; s/\\]//g; s/ *(rev [^)]*)//; s/ *$//'); [ -z \"$name\" ] && name=\"GPU\"; util=0; if [ -f \"$card/gpu_busy_percent\" ]; then util=$(cat \"$card/gpu_busy_percent\"); else max_f=0; act_f=0; for tile in \"$card\"/tile*/gt*/freq0; do [ -d \"$tile\" ] || continue; mf=$(cat \"$tile/max_freq\" 2>/dev/null); af=$(cat \"$tile/act_freq\" 2>/dev/null); [ -n \"$mf\" ] && max_f=$((max_f + mf)); [ -n \"$af\" ] && act_f=$((act_f + af)); done; if [ \"$max_f\" -gt 0 ] 2>/dev/null; then util=$((act_f * 100 / max_f)); fi; fi; temp=0; for hw in \"$card\"/hwmon/hwmon*; do t=$(cat \"$hw/temp1_input\" 2>/dev/null); [ -n \"$t\" ] && { temp=$t; break; }; done; pci=$(grep -o 'PCI_ID=.*' \"$card/uevent\" 2>/dev/null | cut -d= -f2); power=0; for hw in \"$card\"/hwmon/hwmon*; do p=$(cat \"$hw/power1_input\" 2>/dev/null); [ -n \"$p\" ] && { power=$p; break; }; done; vram_total=$(cat \"$card/mem_info_vram_total\" 2>/dev/null || echo 0); vram_used=$(cat \"$card/mem_info_vram_used\" 2>/dev/null || echo 0); gtt_total=$(cat \"$card/mem_info_gtt_total\" 2>/dev/null || echo 0); gtt_used=$(cat \"$card/mem_info_gtt_used\" 2>/dev/null || echo 0); echo \"GPU|\"$name\"|\"$driver\"|\"$pci\"|\"$util\"|\"$temp\"|\"$power\"|\"$vram_total\"|\"$vram_used\"|\"$gtt_total\"|\"$gtt_used; done";
         Proc.runCommand("sysfsGpu", ["sh", "-c", script],
             function(output, exitCode) {
                 if (exitCode !== 0 || !output) return;
@@ -222,7 +222,7 @@ PluginComponent {
     TextMetrics {
         id: gpuPctMetrics
         font.pixelSize: Theme.fontSizeSmall
-        font.weight: Font.Bold
+        font.weight: Font.Medium
         text: "100%"
     }
 
@@ -275,7 +275,7 @@ PluginComponent {
                         text: root.gpuMetricText(0)
                         color: Theme.widgetTextColor
                         font.pixelSize: root.overallTextSize()
-                        font.weight: Font.Bold
+                        font.weight: Font.Medium
                     }
                 }
 

@@ -235,68 +235,88 @@ PluginComponent {
 
     // ── Pill layouts ────────────────────────────────────────────
     TextMetrics {
-        id: speedMetrics
-        font.pixelSize: Math.max(8, root.overallTextSize())
+        id: halfSpeedMetrics
+        font.pixelSize: Math.max(8, root.overallTextSize() * 0.72)
         font.weight: Font.Medium
         text: "888.8M/s"
     }
 
     TextMetrics {
-        id: compactArrowMetrics
-        font.pixelSize: Math.max(8, root.overallTextSize())
+        id: halfArrowMetrics
+        font.pixelSize: Math.max(8, root.overallTextSize() * 0.72)
         font.weight: Font.Medium
         text: "↑"
     }
 
     horizontalBarPill: Component {
         Item {
-            implicitWidth: hContentRow.implicitWidth + 8
+            implicitWidth: hContentRow.implicitWidth + 4
             implicitHeight: root.barThickness
 
             Row {
                 id: hContentRow
-                spacing: 2
+                spacing: 4
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.horizontalCenter: parent.horizontalCenter
 
-                // Download speed + ↓ on left of chart
-                Item {
-                    width: Math.ceil(speedMetrics.advanceWidth)
-                    height: hDlText.implicitHeight
+                // Upload + download speeds stacked on left of chart
+                Column {
+                    spacing: 0
                     anchors.verticalCenter: parent.verticalCenter
 
-                    StyledText {
-                        id: hDlText
-                        anchors.left: parent.left
-                        anchors.right: hDlArrow.left
-                        anchors.rightMargin: 2
-                        anchors.verticalCenter: parent.verticalCenter
-                        horizontalAlignment: Text.AlignRight
-                        text: root.formatCompactSpeed(root.currentDownloadRate)
-                        color: Theme.widgetTextColor
-                        font.pixelSize: Math.max(8, root.overallTextSize())
-                        font.weight: Font.Medium
+                    Row {
+                        spacing: 2
+                        StyledText {
+                            id: hUlText
+                            width: Math.ceil(halfSpeedMetrics.advanceWidth)
+                            anchors.verticalCenter: parent.verticalCenter
+                            horizontalAlignment: Text.AlignRight
+                            text: root.formatCompactSpeed(root.currentUploadRate)
+                            color: Theme.widgetTextColor
+                            font.pixelSize: Math.max(8, root.overallTextSize() * 0.72)
+                            font.weight: Font.Medium
+                        }
+                        StyledText {
+                            id: hUlArrow
+                            width: Math.ceil(halfArrowMetrics.advanceWidth)
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "↑"
+                            color: root.uploadColor
+                            font.pixelSize: Math.max(8, root.overallTextSize() * 0.72)
+                            font.weight: Font.Medium
+                        }
                     }
 
-                    StyledText {
-                        id: hDlArrow
-                        width: Math.ceil(compactArrowMetrics.advanceWidth)
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "↓"
-                        color: root.downloadColor
-                        font.pixelSize: Math.max(8, root.overallTextSize())
-                        font.weight: Font.Medium
+                    Row {
+                        spacing: 2
+                        StyledText {
+                            id: hDlText
+                            width: Math.ceil(halfSpeedMetrics.advanceWidth)
+                            anchors.verticalCenter: parent.verticalCenter
+                            horizontalAlignment: Text.AlignRight
+                            text: root.formatCompactSpeed(root.currentDownloadRate)
+                            color: Theme.widgetTextColor
+                            font.pixelSize: Math.max(8, root.overallTextSize() * 0.72)
+                            font.weight: Font.Medium
+                        }
+                        StyledText {
+                            id: hDlArrow
+                            width: Math.ceil(halfArrowMetrics.advanceWidth)
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "↓"
+                            color: root.downloadColor
+                            font.pixelSize: Math.max(8, root.overallTextSize() * 0.72)
+                            font.weight: Font.Medium
+                        }
                     }
                 }
 
-                // Mini chart (fixed size, decoupled from bar thickness)
                 Rectangle {
                     width: root.chartWidth
-                    height: Math.min(root.barThickness - 6, 20)
+                    height: Math.min(root.barThickness - 3, 25)
                     anchors.verticalCenter: parent.verticalCenter
                     radius: Math.min(4, height / 2)
-                    color: Theme.surfaceContainer
+                    color: "transparent"
                     clip: true
 
                     NetworkHistoryChart {
@@ -313,36 +333,6 @@ PluginComponent {
                         gridVisible: false
                     }
                 }
-
-                // ↑ + Upload speed on right of chart
-                Item {
-                    width: Math.ceil(speedMetrics.advanceWidth)
-                    height: hUlText.implicitHeight
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    StyledText {
-                        id: hUlArrow
-                        width: Math.ceil(compactArrowMetrics.advanceWidth)
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "↑"
-                        color: root.uploadColor
-                        font.pixelSize: Math.max(8, root.overallTextSize())
-                        font.weight: Font.Medium
-                    }
-
-                    StyledText {
-                        id: hUlText
-                        anchors.left: hUlArrow.right
-                        anchors.leftMargin: 2
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.formatCompactSpeed(root.currentUploadRate)
-                        color: Theme.widgetTextColor
-                        font.pixelSize: Math.max(8, root.overallTextSize())
-                        font.weight: Font.Medium
-                    }
-                }
             }
         }
     }
@@ -356,22 +346,22 @@ PluginComponent {
             Column {
                 id: vContentColumn
                 anchors.centerIn: parent
-                spacing: 1
+                spacing: 0
 
                 StyledText {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "↓" + root.formatCompactSpeed(root.currentDownloadRate)
                     color: root.downloadColor
-                    font.pixelSize: Math.max(7, root.overallTextSize() - 1)
+                    font.pixelSize: Math.max(8, root.overallTextSize())
                     font.weight: Font.Medium
                 }
 
                 Rectangle {
                     width: Math.max(24, root.chartWidth * 0.6)
-                    height: Math.min(root.barThickness * 0.8, root.chartWidth * 0.5)
+                    height: Math.min(root.barThickness * 0.8 + 4, root.chartWidth * 0.5 + 4)
                     anchors.horizontalCenter: parent.horizontalCenter
                     radius: Math.min(4, width / 3)
-                    color: Theme.surfaceContainer
+                    color: "transparent"
                     clip: true
 
                     NetworkHistoryChart {
@@ -392,7 +382,7 @@ PluginComponent {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "↑" + root.formatCompactSpeed(root.currentUploadRate)
                     color: root.uploadColor
-                    font.pixelSize: Math.max(7, root.overallTextSize() - 1)
+                    font.pixelSize: Math.max(8, root.overallTextSize())
                     font.weight: Font.Medium
                 }
             }

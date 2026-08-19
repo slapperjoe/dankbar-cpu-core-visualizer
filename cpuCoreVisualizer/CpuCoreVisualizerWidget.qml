@@ -239,7 +239,7 @@ PluginComponent {
     TextMetrics {
         id: cpuPercentMetrics
         font.pixelSize: Theme.fontSizeSmall
-        font.weight: Font.Bold
+        font.weight: Font.Medium
         text: "100%"  // worst-case width
     }
 
@@ -300,7 +300,7 @@ PluginComponent {
                         text: root.displayCpuUsage.toFixed(1) + "%"
                         color: Theme.widgetTextColor
                         font.pixelSize: root.overallTextSize()
-                        font.weight: Font.Bold
+                        font.weight: Font.Medium
                     }
                 }
             }
@@ -364,7 +364,7 @@ PluginComponent {
                             text: root.displayCpuUsage.toFixed(1) + "%"
                             color: Theme.primary
                             font.pixelSize: root.overallTextSize()
-                            font.weight: Font.Bold
+                            font.weight: Font.Medium
                         }
                     }
             }
