@@ -162,3 +162,15 @@
 - `root.pluginPopout` also fails — IDs are not properties
 - **Must use children iteration**: loop through `root.children` and find the child that has `setTriggerPosition` method
 - The `PluginPopout` child in `PluginComponent` is instantiated but its ID is scoped to the base file
+
+## Desktop-Widget Plugin Pattern (type: "desktop")
+- For a standalone desktop widget (not bar), set `"type": "desktop"` + `"capabilities": ["desktop-widget", ...]` in plugin.json. This registers the plugin in `DesktopWidgetRegistry.pluginDesktopComponents`.
+- The widget QML extends `DesktopPluginComponent` (NOT `PluginComponent`). It provides `minWidth`/`minHeight` and `pluginData` for config.
+- Instances are stored in `settings.json` → `desktopWidgetInstances` with shape:
+  `{ id, widgetType, name, enabled, config: {...}, positions: { "<screenKey>": { x, y, width, height } } }`
+  - screenKey = `SettingsData.getScreenDisplayName(screen)` (e.g. "DP-1" with displayNameMode "system").
+  - Positions are LOGICAL pixels (screen at DPR 1.25 = 3072x1728 for a 3840x2160 display).
+- The wrapper (`DesktopPluginWrapper.qml`) clamps size to `max(minWidth, ...)`/`max(minHeight, ...)`, so set `minHeight` small to allow tight layouts. There is NO IPC to set instance size directly — the user resizes via the corner handle (wrapper persists its own saved size).
+- Drag = right-button drag; resize = bottom-right purple handle.
+- Hot reload a changed plugin: `dms ipc call plugins reload <pluginId>` (PluginService logs "Plugin unloaded/loaded").
+- `dms ipc call desktopWidget list` shows instances. The QML `PluginService` (what discovers plugins) is separate from the Go daemon's `plugin-scan` — the latter can be empty even when plugins work.

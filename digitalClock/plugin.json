@@ -1,0 +1,14 @@
+{
+    "id": "digitalClock",
+    "name": "Digital Clock",
+    "description": "A wide digital clock with date, ideal for the corner of your desktop",
+    "version": "1.0.0",
+    "author": "Mark",
+    "type": "desktop",
+    "capabilities": ["desktop-widget", "clock"],
+    "component": "./DigitalClockWidget.qml",
+    "icon": "schedule",
+    "settings": "./DigitalClockSettings.qml",
+    "requires_dms": ">=1.2.0",
+    "permissions": ["settings_read", "settings_write"]
+}

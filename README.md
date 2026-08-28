@@ -12,6 +12,8 @@ Split monitoring plugins for [DankBar](https://github.com/DankMachines/DankMater
 | [Disk Monitor](diskMonitor/) | `diskMonitor` | Disk mount usage bars |
 | [Network Monitor](networkMonitor/) | `networkMonitor` | Rolling network throughput chart |
 | [Audio Switcher](audioSwitcher/) | `audioSwitcher` | Audio output switcher |
+| [Quick Actions](quickActions/) | `quickActions` | Quick action toggles |
+| [Digital Clock](digitalClock/) | `digitalClock` | Wide digital clock + date desktop widget |
 
 ## Per-plugin features
 
@@ -42,6 +44,14 @@ Split monitoring plugins for [DankBar](https://github.com/DankMachines/DankMater
 - Clickable audio output button with current-device icon
 - Sink selection and audio panel trigger
 
+### Quick Actions
+- Quick action toggles
+
+### Digital Clock
+- Wide horizontal digital clock + date, ideal for the corner of your desktop
+- Toggles for seconds, AM/PM, and date
+- Fixed font sizing: resizing the widget trims padding, not the digits
+
 ## Desktop widget support
 
 Each plugin's `plugin.json` declares `"type": ["widget", "desktop-widget"]`. The QML widget auto-detects its host:
@@ -64,7 +74,7 @@ chmod +x ./install.sh
 Or install all plugins:
 
 ```bash
-for dir in cpuCoreVisualizer gpuMonitor memoryMonitor diskMonitor networkMonitor audioSwitcher; do
+for dir in cpuCoreVisualizer gpuMonitor memoryMonitor diskMonitor networkMonitor audioSwitcher quickActions digitalClock; do
     cd "$dir"
     chmod +x ./install.sh
     ./install.sh
